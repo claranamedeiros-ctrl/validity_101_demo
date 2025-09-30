@@ -9,5 +9,5 @@ Rails.application.routes.draw do
 
   # Alternative health check route in case /up doesn't work
   get '/health', to: proc { [200, {'Content-Type' => 'text/plain'}, ['HEALTHY']] }
-  root "validities#new"
+  root to: redirect('/prompt_engine')
 end
