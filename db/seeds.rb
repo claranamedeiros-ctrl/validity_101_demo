@@ -47,23 +47,65 @@ end
 puts "✅ Created PromptEngine::Prompt: #{prompt.name}"
 puts "✅ Created PromptEngine::EvalSet: #{eval_set.name}"
 
-# Create sample evaluation data for demo
-if defined?(PromptEngine::Eval) && PromptEngine::Eval.count == 0
-  puts "Creating sample evaluation data..."
+# Create test cases from CSV files
+require 'csv'
 
-  PromptEngine::Eval.create!(
-    eval_set: eval_set,
-    input_data: {
-      patent_number: "US10123456B2",
-      claim_number: 1,
-      claim_text: "A method of processing data using a computer...",
-      abstract: "A system and method for processing data..."
-    }.to_json,
-    expected_output: "Sample expected validity analysis output",
-    metadata: { created_for: "demo", source: "seed_data" }.to_json
-  )
+if PromptEngine::TestCase.where(eval_set: eval_set).count == 0
+  puts "Creating patent validity test cases from CSV files..."
 
-  puts "✅ Created sample evaluation data"
+  # Read input data and ground truth
+  inputs_file = Rails.root.join('inputs', 'validity_inputs_test.csv')
+  ground_truth_file = Rails.root.join('groundt', 'gt_aligned_normalized_test.csv')
+
+  if File.exist?(inputs_file) && File.exist?(ground_truth_file)
+    # Load ground truth data into hash for lookup
+    ground_truth = {}
+    CSV.foreach(ground_truth_file, headers: true) do |row|
+      key = "#{row['patent_number']}_#{row['claim_number']}"
+      ground_truth[key] = row['gt_overall_eligibility']
+    end
+
+    # Create test cases from input data
+    test_cases_created = 0
+    CSV.foreach(inputs_file, headers: true) do |row|
+      key = "#{row['patent_number']}_#{row['claim_number']}"
+      expected_output = ground_truth[key] || 'unknown'
+
+      PromptEngine::TestCase.create!(
+        eval_set: eval_set,
+        input_variables: {
+          patent_id: row['patent_number'],
+          claim_number: row['claim_number'].to_i,
+          claim_text: row['claim_text'],
+          abstract: row['abstract']
+        }.to_json,
+        expected_output: expected_output,
+        description: "#{row['patent_number']} Claim #{row['claim_number']}"
+      )
+
+      test_cases_created += 1
+    end
+
+    puts "✅ Created #{test_cases_created} patent validity test cases"
+  else
+    puts "⚠️  CSV files not found, creating sample test case instead"
+
+    PromptEngine::TestCase.create!(
+      eval_set: eval_set,
+      input_variables: {
+        patent_id: "US6128415A",
+        claim_number: 1,
+        claim_text: "A device profile for describing properties of a device in a digital image reproduction system...",
+        abstract: "Device profiles conventionally describe..."
+      }.to_json,
+      expected_output: "ineligible",
+      description: "US6128415A Claim 1 - Sample Test Case"
+    )
+
+    puts "✅ Created sample test case"
+  end
+else
+  puts "⏭️  Test cases already exist, skipping"
 end
 
 puts "🎉 Database seeding completed!"
