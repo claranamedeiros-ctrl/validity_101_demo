@@ -70,4 +70,11 @@ Rails.application.configure do
 
   # Raise error when a before_action's only/except options reference missing actions.
   config.action_controller.raise_on_missing_callback_actions = true
+
+  # Railway-specific configuration for health checks
+  if ENV['RAILWAY_ENVIRONMENT'] == 'production'
+    config.hosts << ENV['RAILWAY_PUBLIC_DOMAIN'] if ENV['RAILWAY_PUBLIC_DOMAIN']
+    config.hosts << /.*\.railway\.app$/
+    config.hosts << 'healthcheck.railway.app'  # Required for Railway health checks
+  end
 end
