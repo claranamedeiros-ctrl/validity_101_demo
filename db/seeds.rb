@@ -17,7 +17,7 @@ end
 
 # Create the main prompt for patent validity analysis
 prompt = PromptEngine::Prompt.find_or_create_by(id: 1) do |p|
-  p.title = "Patent Validity Analysis"
+  p.name = "Patent Validity Analysis"
   p.description = "AI-powered patent validity analysis using Alice Test methodology"
   p.content = <<~PROMPT
     You are a patent validity analysis expert. Analyze the following patent claim for validity under 35 USC 101 using the Alice Test methodology.
@@ -44,7 +44,7 @@ eval_set = PromptEngine::EvalSet.find_or_create_by(id: 2) do |es|
   es.description = "Test cases for patent validity analysis covering various patent types and claims"
 end
 
-puts "✅ Created PromptEngine::Prompt: #{prompt.title}"
+puts "✅ Created PromptEngine::Prompt: #{prompt.name}"
 puts "✅ Created PromptEngine::EvalSet: #{eval_set.name}"
 
 # Create sample evaluation data for demo
