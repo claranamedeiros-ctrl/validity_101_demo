@@ -4,6 +4,10 @@ Rails.application.routes.draw do
   get 'validity/:id', to: 'validities#show', as: 'validity'
   get 'evaluation', to: 'evaluation#index', as: 'evaluation'
   get 'eval_out/:filename', to: 'evaluation#download', as: 'eval_file'
-  get '/up', to: proc { [200, {}, ['OK']] }  # health check
+  # Simple health check that bypasses full Rails stack
+  get '/up', to: proc { [200, {'Content-Type' => 'text/plain'}, ['OK']] }
+
+  # Alternative health check route in case /up doesn't work
+  get '/health', to: proc { [200, {'Content-Type' => 'text/plain'}, ['HEALTHY']] }
   root "validities#new"
 end
