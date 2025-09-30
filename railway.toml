@@ -1,8 +1,10 @@
 [build]
 builder = "NIXPACKS"
+buildCommand = "bundle exec rails assets:precompile"
 
 [build.environment]
 BUNDLE_FORCE_RUBY_PLATFORM = "1"
+RAILS_ENV = "production"
 
 [deploy]
 startCommand = "bundle exec rails server -b 0.0.0.0 -p $PORT"
