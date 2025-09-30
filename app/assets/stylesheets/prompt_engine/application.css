@@ -1,0 +1,25 @@
+/*
+ * PromptEngine Admin Styles
+ *
+ * Import all component styles in the correct order using Sprockets require
+ */
+
+/*
+ *= require prompt_engine/foundation
+ *= require prompt_engine/layout
+ *= require prompt_engine/sidebar
+ *= require prompt_engine/buttons
+ *= require prompt_engine/forms
+ *= require prompt_engine/tables
+ *= require prompt_engine/cards
+ *= require prompt_engine/dashboard
+ *= require prompt_engine/prompts
+ *= require prompt_engine/versions
+ *= require prompt_engine/notifications
+ *= require prompt_engine/loading
+ *= require prompt_engine/comparison
+ *= require prompt_engine/evaluations
+ *= require prompt_engine/utilities
+ *= require prompt_engine/overrides
+ *= require prompt_engine/components/_test_runs
+ */

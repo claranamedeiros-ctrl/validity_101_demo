@@ -1,0 +1,224 @@
+<div class="admin-header">
+  <div>
+    <h1>Evaluation Run Results</h1>
+    <p class="text-muted">
+      <%= @eval_run.eval_set.name %> • 
+      <%= @eval_run.created_at.strftime("%b %d, %Y at %I:%M %p") %>
+    </p>
+  </div>
+  <div class="btn-group">
+    <%= link_to "Back to Eval Set", prompt_eval_set_path(@prompt, @eval_run.eval_set), 
+        class: "btn btn--secondary btn--medium" %>
+    <% if @eval_run.report_url.present? %>
+      <%= link_to "View OpenAI Report", @eval_run.report_url, 
+          target: "_blank", rel: "noopener", class: "btn btn--secondary btn--medium" %>
+    <% end %>
+  </div>
+</div>
+
+<div class="card mb-lg">
+  <div class="card__header">
+    <h3 class="card__title">Evaluation Summary</h3>
+  </div>
+  <div class="card__body">
+    <div class="detail-grid">
+      <div class="detail-item">
+        <label class="detail-label">Status</label>
+        <div class="detail-value">
+          <span class="table__badge table__badge--<%= @eval_run.status %>">
+            <%= @eval_run.status.humanize %>
+          </span>
+        </div>
+      </div>
+
+      <div class="detail-item">
+        <label class="detail-label">Prompt Version</label>
+        <div class="detail-value">
+          <%= link_to "v#{@eval_run.prompt_version.version_number}", 
+              prompt_version_path(@prompt, @eval_run.prompt_version), 
+              class: "table__link" %>
+        </div>
+      </div>
+
+      <div class="detail-item">
+        <label class="detail-label">Total Tests</label>
+        <div class="detail-value"><%= @eval_run.total_count %></div>
+      </div>
+
+      <div class="detail-item">
+        <label class="detail-label">Passed</label>
+        <div class="detail-value text-success"><%= @eval_run.passed_count %></div>
+      </div>
+
+      <div class="detail-item">
+        <label class="detail-label">Failed</label>
+        <div class="detail-value text-danger"><%= @eval_run.failed_count %></div>
+      </div>
+
+      <div class="detail-item">
+        <label class="detail-label">Success Rate</label>
+        <div class="detail-value">
+          <% if @eval_run.total_count > 0 %>
+            <%= number_to_percentage((@eval_run.passed_count.to_f / @eval_run.total_count * 100), 
+                precision: 1) %>
+          <% else %>
+            <span class="text-muted">—</span>
+          <% end %>
+        </div>
+      </div>
+
+      <% if @eval_run.started_at.present? %>
+        <div class="detail-item">
+          <label class="detail-label">Started At</label>
+          <div class="detail-value"><%= @eval_run.started_at.strftime("%b %d, %Y %I:%M %p") %></div>
+        </div>
+      <% end %>
+
+      <% if @eval_run.completed_at.present? %>
+        <div class="detail-item">
+          <label class="detail-label">Completed At</label>
+          <div class="detail-value"><%= @eval_run.completed_at.strftime("%b %d, %Y %I:%M %p") %></div>
+        </div>
+
+        <div class="detail-item">
+          <label class="detail-label">Duration</label>
+          <div class="detail-value">
+            <%= distance_of_time_in_words(@eval_run.started_at, @eval_run.completed_at) %>
+          </div>
+        </div>
+      <% end %>
+    </div>
+  </div>
+</div>
+
+<% if @eval_run.status == 'pending' %>
+  <div class="card mb-lg">
+    <div class="card__body">
+      <div class="text-center py-lg">
+        <div class="mb-md">
+          <div class="spinner spinner--large"></div>
+        </div>
+        <h3 class="mb-md">Preparing Evaluation</h3>
+        <p class="text-muted">Setting up evaluation environment...</p>
+        <p class="text-muted">This page will refresh automatically.</p>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    setTimeout(function() {
+      location.reload();
+    }, 3000);
+  </script>
+<% elsif @eval_run.status == 'running' %>
+  <div class="card mb-lg">
+    <div class="card__body">
+      <div class="text-center py-lg">
+        <div class="mb-md">
+          <div class="spinner spinner--large"></div>
+        </div>
+        <h3 class="mb-md">Evaluation in Progress</h3>
+        <%
+          # Get the count of selected patents from metadata
+          selected_count = begin
+            metadata = @eval_run.metadata
+            if metadata.is_a?(String)
+              metadata = JSON.parse(metadata) rescue {}
+            end
+            metadata = {} unless metadata.is_a?(Hash)
+
+            if metadata['selected_patent_ids'].present?
+              metadata['selected_patent_ids'].count
+            elsif metadata[:selected_patent_ids].present?
+              metadata[:selected_patent_ids].count
+            else
+              @eval_run.eval_set.test_cases.count
+            end
+          rescue
+            @eval_run.eval_set.test_cases.count
+          end
+        %>
+        <p class="text-muted">Running <%= selected_count %> selected patents on our custom evaluation infrastructure...</p>
+        <p class="text-muted">This may take a few minutes depending on the number of test cases.</p>
+        <div class="mt-lg">
+          <div class="progress progress--striped progress--animated" style="max-width: 400px; margin: 0 auto;">
+            <div class="progress__bar" style="width: 50%"></div>
+          </div>
+        </div>
+        <p class="text-muted mt-md">This page will refresh automatically every 5 seconds.</p>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    setTimeout(function() {
+      location.reload();
+    }, 5000);
+  </script>
+<% elsif @eval_run.status == 'failed' %>
+  <div class="card mb-lg">
+    <div class="card__body">
+      <div class="alert alert--danger">
+        <h3 class="mb-md">Evaluation Failed</h3>
+        <p><%= @eval_run.error_message || "An unknown error occurred during evaluation." %></p>
+        
+        <% if @eval_run.error_message&.include?("API key") %>
+          <div class="mt-md">
+            <p><strong>How to fix:</strong></p>
+            <ul>
+              <li>Check your OpenAI API key configuration in <%= link_to "Settings", settings_path %></li>
+              <li>Ensure your API key has access to the Evals API</li>
+              <li>Verify your API key is not expired or revoked</li>
+            </ul>
+          </div>
+        <% elsif @eval_run.error_message&.include?("rate limit") %>
+          <div class="mt-md">
+            <p><strong>How to fix:</strong></p>
+            <ul>
+              <li>Wait a few minutes before trying again</li>
+              <li>Consider reducing the number of test cases</li>
+              <li>Check your OpenAI API usage limits</li>
+            </ul>
+          </div>
+        <% end %>
+        
+        <div class="mt-lg">
+          <%= link_to "Back to Evaluation Set", prompt_eval_set_path(@prompt, @eval_run.eval_set), 
+              class: "btn btn--secondary btn--medium" %>
+          <%= link_to "View Settings", settings_path, class: "btn btn--secondary btn--medium" %>
+        </div>
+      </div>
+    </div>
+  </div>
+<% elsif @eval_run.status == 'completed' %>
+  <div class="card">
+    <div class="card__header">
+      <h3 class="card__title">Results Overview</h3>
+    </div>
+    <div class="card__body">
+      <% if @eval_run.passed_count == @eval_run.total_count %>
+        <div class="alert alert--success mb-md">
+          <strong>All tests passed!</strong> Every test case produced the expected output.
+        </div>
+      <% elsif @eval_run.failed_count > 0 %>
+        <div class="alert alert--warning mb-md">
+          <strong><%= pluralize(@eval_run.failed_count, 'test') %> failed.</strong>
+          Some test cases did not produce the expected output.
+        </div>
+      <% end %>
+      
+      <p class="text-muted">
+        Individual test results are available in the 
+        <% if @eval_run.report_url.present? %>
+          <%= link_to "OpenAI evaluation report", @eval_run.report_url, 
+              target: "_blank", rel: "noopener", class: "table__link" %>.
+        <% else %>
+          OpenAI evaluation report.
+        <% end %>
+        The report includes detailed information about each test case, including the actual outputs 
+        and exact comparison results.
+      </p>
+    </div>
+  </div>
+<% end %>
+

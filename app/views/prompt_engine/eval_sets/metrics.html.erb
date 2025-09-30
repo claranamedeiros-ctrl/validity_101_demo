@@ -1,0 +1,674 @@
+<div class="admin-header">
+  <div>
+    <h1>Evaluation Metrics</h1>
+    <p class="text-muted">Detailed analysis for <%= @eval_set.name %></p>
+  </div>
+  <div class="btn-group">
+    <%= link_to "Back to Eval Set", "/prompt_engine/prompts/#{@prompt.id}/eval_sets/#{@eval_set.id}",
+        class: "btn btn--secondary btn--medium" %>
+    <% if @eval_set.eval_runs.any? %>
+      <%= link_to "View Results", "/prompt_engine/prompts/#{@prompt.id}/eval_sets/#{@eval_set.id}?mode=results",
+          class: "btn btn--secondary btn--medium" %>
+    <% end %>
+  </div>
+</div>
+
+<div class="container">
+  <%
+    eval_runs = @eval_set.eval_runs.order(created_at: :desc)
+    completed_runs = eval_runs.where(status: 'completed')
+  %>
+
+  <% if completed_runs.any? %>
+    <!-- Summary Cards -->
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <div class="metric-value"><%= completed_runs.count %></div>
+        <div class="metric-label">Total Runs</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-value">
+          <% if completed_runs.any? %>
+            <%= (completed_runs.average(:passed_count).to_f / completed_runs.average(:total_count).to_f * 100).round(1) %>%
+          <% else %>
+            N/A
+          <% end %>
+        </div>
+        <div class="metric-label">Average Success Rate</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-value"><%= completed_runs.sum(:total_count) %></div>
+        <div class="metric-label">Total Tests Run</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-value">
+          <% latest_run = completed_runs.first %>
+          <% if latest_run %>
+            <%= (latest_run.passed_count.to_f / latest_run.total_count.to_f * 100).round(1) %>%
+          <% else %>
+            N/A
+          <% end %>
+        </div>
+        <div class="metric-label">Latest Run Success</div>
+      </div>
+    </div>
+
+    <!-- Detailed Ground Truth vs LLM Comparison -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Ground Truth vs LLM Output Analysis</h2>
+        <div class="card-actions">
+          <% if completed_runs.any? %>
+            <%= form_with url: "/prompt_engine/prompts/#{@prompt.id}/eval_sets/#{@eval_set.id}/metrics", method: :get, local: true,
+                html: { style: "display: inline-flex; align-items: center; gap: 0.5rem;" } do |form| %>
+              <%= form.select :run_id,
+                  options_from_collection_for_select(completed_runs, :id,
+                    lambda { |run| "Run ##{run.id} - #{run.created_at.strftime('%m/%d %H:%M')} (#{run.passed_count}/#{run.total_count})" },
+                    params[:run_id]),
+                  { prompt: "Select Run to Analyze" },
+                  { class: "form-select", onchange: "this.form.submit();" } %>
+            <% end %>
+          <% end %>
+        </div>
+      </div>
+
+      <div class="card-body">
+        <%
+          current_run = if params[:run_id].present?
+            completed_runs.find { |r| r.id.to_s == params[:run_id].to_s } || completed_runs.first
+          else
+            completed_runs.first
+          end
+        %>
+
+        <% if current_run %>
+          <div class="analysis-header">
+            <h3>Run #<%= current_run.id %> Analysis</h3>
+            <div class="run-summary">
+              <span class="metric">Created: <%= current_run.created_at.strftime("%b %d, %Y at %I:%M %p") %></span>
+              <span class="metric">Success Rate: <%= (current_run.passed_count.to_f / current_run.total_count.to_f * 100).round(1) %>%</span>
+              <span class="metric">Patents Analyzed: <%= current_run.total_count %></span>
+            </div>
+          </div>
+
+          <%
+            # Load ground truth data
+            ground_truth_file = Rails.root.join('groundt', 'gt_aligned_normalized_test.csv')
+            ground_truth_data = {}
+
+            if File.exist?(ground_truth_file)
+              require 'csv'
+              CSV.foreach(ground_truth_file, headers: true) do |row|
+                key = "#{row['patent_number']}_#{row['claim_number']}"
+                ground_truth_data[key] = {
+                  subject_matter: row['gt_subject_matter'],
+                  inventive_concept: row['gt_inventive_concept'],
+                  overall_eligibility: row['gt_overall_eligibility']
+                }
+              end
+            end
+
+            # Get actual evaluation results from the database
+            eval_results = current_run.eval_results.includes(:test_case)
+          %>
+
+          <% if eval_results.any? %>
+            <div class="comparison-table-container">
+              <table class="comparison-table">
+                <thead>
+                  <tr>
+                    <th rowspan="2">Patent ID</th>
+                    <th colspan="3">Ground Truth vs LLM Output</th>
+                    <th rowspan="2">Validity Score</th>
+                  </tr>
+                  <tr>
+                    <th>Subject Matter<br><small>Expected | Actual</small></th>
+                    <th>Inventive Concept<br><small>Expected | Actual</small></th>
+                    <th>Overall Eligibility<br><small>Expected | Actual</small></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% eval_results.each do |result| %>
+                    <%
+                      # Parse test case input variables
+                      input_vars = JSON.parse(result.test_case.input_variables) rescue {}
+                      patent_id = input_vars['patent_id']
+                      claim_number = input_vars['claim_number']
+                      key = "#{patent_id}_#{claim_number}"
+
+                      # Get ground truth data
+                      ground_truth = ground_truth_data[key] || {}
+
+                      # Map ground truth values to expected LLM output format
+                      expected_subject_matter = ground_truth[:subject_matter]
+                      expected_inventive_concept = case ground_truth[:inventive_concept]
+                        when 'no ic found', 'nan' then 'uninventive'
+                        when 'ic found' then 'inventive'
+                        else ground_truth[:inventive_concept]
+                      end
+                      expected_overall = ground_truth[:overall_eligibility]
+
+                      # Parse actual LLM output from stored result
+                      actual_llm_output = begin
+                        JSON.parse(result.actual_output)
+                      rescue
+                        # If it's not JSON, try to extract from string
+                        if result.actual_output.include?('subject_matter')
+                          # Try to parse as JSON-like string
+                          begin
+                            eval(result.actual_output)
+                          rescue
+                            { 'overall_eligibility' => result.actual_output }
+                          end
+                        else
+                          { 'overall_eligibility' => result.actual_output }
+                        end
+                      end
+
+                      # Get actual values from LLM output
+                      actual_subject_matter = actual_llm_output['subject_matter'] || actual_llm_output[:subject_matter]
+                      actual_inventive_concept = actual_llm_output['inventive_concept'] || actual_llm_output[:inventive_concept]
+                      actual_overall = actual_llm_output['overall_eligibility'] || actual_llm_output[:overall_eligibility]
+                      actual_validity_score = actual_llm_output['validity_score'] || actual_llm_output[:validity_score]
+
+                      # Determine if each field matches
+                      subject_matter_match = expected_subject_matter.to_s.downcase == actual_subject_matter.to_s.downcase
+                      inventive_concept_match = expected_inventive_concept.to_s.downcase == actual_inventive_concept.to_s.downcase
+                      overall_eligibility_match = expected_overall.to_s.downcase == actual_overall.to_s.downcase
+
+                      # Overall pass status comes from the stored result
+                      overall_pass = result.passed
+                    %>
+                    <tr class="comparison-row">
+                      <td class="patent-id-cell">
+                        <strong><%= patent_id %></strong>
+                      </td>
+
+                      <!-- Subject Matter -->
+                      <td class="comparison-cell">
+                        <div class="comparison-pair">
+                          <div class="expected-value <%= subject_matter_match ? 'match' : 'mismatch' %>">
+                            <%= expected_subject_matter || 'N/A' %>
+                          </div>
+                          <div class="separator">|</div>
+                          <div class="actual-value <%= subject_matter_match ? 'match' : 'mismatch' %>">
+                            <%= actual_subject_matter || 'N/A' %>
+                          </div>
+                        </div>
+                      </td>
+
+                      <!-- Inventive Concept -->
+                      <td class="comparison-cell">
+                        <div class="comparison-pair">
+                          <div class="expected-value <%= inventive_concept_match ? 'match' : 'mismatch' %>">
+                            <%= expected_inventive_concept || 'N/A' %>
+                          </div>
+                          <div class="separator">|</div>
+                          <div class="actual-value <%= inventive_concept_match ? 'match' : 'mismatch' %>">
+                            <%= actual_inventive_concept || 'N/A' %>
+                          </div>
+                        </div>
+                      </td>
+
+                      <!-- Overall Eligibility -->
+                      <td class="comparison-cell">
+                        <div class="comparison-pair">
+                          <div class="expected-value <%= overall_eligibility_match ? 'match' : 'mismatch' %>">
+                            <%= expected_overall || 'N/A' %>
+                          </div>
+                          <div class="separator">|</div>
+                          <div class="actual-value <%= overall_eligibility_match ? 'match' : 'mismatch' %>">
+                            <%= actual_overall || 'N/A' %>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td class="validity-score-cell">
+                        <% if actual_validity_score.present? %>
+                          <div class="validity-score-display">
+                            <span class="score-value score-<%= actual_validity_score %>"><%= actual_validity_score %>/5</span>
+                            <div class="score-bar">
+                              <div class="score-fill" style="width: <%= (actual_validity_score.to_f / 5 * 100).round(1) %>%"></div>
+                            </div>
+                          </div>
+                        <% else %>
+                          <span class="no-score">No Score</span>
+                        <% end %>
+                      </td>
+                    </tr>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="data-note data-note--real">
+              <p><strong>✅ Real Data:</strong> This page shows actual LLM outputs from your evaluation runs compared against ground truth data.</p>
+              <p><strong>Data Sources:</strong> LLM outputs from evaluation results database + Ground truth from <code>groundt/gt_aligned_normalized_test.csv</code></p>
+            </div>
+          <% else %>
+            <div class="no-results-message">
+              <h4>No Detailed Results Available</h4>
+              <p>This evaluation run doesn't have detailed LLM output data stored. This might be because:</p>
+              <ul>
+                <li>The evaluation was run before the detailed result storage was implemented</li>
+                <li>There was an issue storing the individual results during evaluation</li>
+              </ul>
+              <p><strong>Solution:</strong> Run a new evaluation to see detailed LLM vs Ground Truth comparison.</p>
+              <%= link_to "Run New Evaluation", "/prompt_engine/prompts/#{@prompt.id}/eval_sets/#{@eval_set.id}?mode=run_form", class: "btn btn--primary" %>
+            </div>
+          <% end %>
+        <% else %>
+          <div class="empty-state">
+            <p>No completed evaluation runs available for analysis.</p>
+            <%= link_to "Run New Evaluation", "/prompt_engine/prompts/#{@prompt.id}/eval_sets/#{@eval_set.id}?mode=run_form", class: "btn btn--primary" %>
+          </div>
+        <% end %>
+      </div>
+    </div>
+  <% else %>
+    <div class="empty-state-card">
+      <h3>No Evaluation Data Available</h3>
+      <p>Run some evaluations to see detailed metrics and ground truth comparisons.</p>
+      <%= link_to "Start First Evaluation", "/prompt_engine/prompts/#{@prompt.id}/eval_sets/#{@eval_set.id}?mode=run_form", class: "btn btn--primary btn--large" %>
+    </div>
+  <% end %>
+</div>
+
+<style>
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.metric-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 1.5rem;
+  text-align: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.metric-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 0.5rem;
+}
+
+.metric-label {
+  color: #6b7280;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f9fafb;
+}
+
+.card-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.card-body {
+  padding: 1.5rem;
+}
+
+.analysis-header {
+  margin-bottom: 1.5rem;
+}
+
+.analysis-header h3 {
+  margin: 0 0 0.5rem 0;
+  color: #0f172a;
+}
+
+.run-summary {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.metric {
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.comparison-table-container {
+  overflow-x: auto;
+  margin: 1.5rem 0;
+}
+
+.comparison-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+}
+
+.comparison-table th {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 0.75rem;
+  text-align: center;
+  font-weight: 600;
+  color: #374151;
+  font-size: 0.875rem;
+}
+
+.comparison-table td {
+  border: 1px solid #e2e8f0;
+  padding: 0.75rem;
+  text-align: center;
+  vertical-align: top;
+}
+
+.patent-id-cell {
+  text-align: left !important;
+  font-weight: 500;
+}
+
+.comparison-cell {
+  min-width: 200px;
+}
+
+.comparison-pair {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.expected-value,
+.actual-value {
+  padding: 0.375rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  flex: 1;
+  text-align: center;
+}
+
+.expected-value {
+  background: #dbeafe;
+  border: 1px solid #3b82f6;
+  color: #1e40af;
+}
+
+.actual-value {
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  color: #92400e;
+}
+
+.expected-value.match,
+.actual-value.match {
+  background: #dcfce7 !important;
+  border-color: #16a34a !important;
+  color: #15803d !important;
+}
+
+.expected-value.mismatch,
+.actual-value.mismatch {
+  background: #fee2e2 !important;
+  border-color: #dc2626 !important;
+  color: #dc2626 !important;
+}
+
+.separator {
+  font-weight: bold;
+  color: #6b7280;
+  margin: 0 0.25rem;
+}
+
+.status-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.status-pass {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-fail {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.notes-cell {
+  text-align: left !important;
+  max-width: 200px;
+}
+
+.success-note {
+  color: #16a34a;
+  font-weight: 500;
+}
+
+.error-note {
+  color: #dc2626;
+  font-weight: 500;
+}
+
+.data-note {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 1rem;
+  margin-top: 1.5rem;
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.data-note--real {
+  background: #f0fdf4;
+  border-color: #16a34a;
+  color: #15803d;
+}
+
+.data-note code {
+  background: #e5e7eb;
+  padding: 0.125rem 0.375rem;
+  border-radius: 3px;
+  font-family: monospace;
+}
+
+.no-results-message {
+  background: #fefbf3;
+  border: 1px solid #f59e0b;
+  border-radius: 8px;
+  padding: 2rem;
+  text-align: center;
+  color: #92400e;
+}
+
+.no-results-message h4 {
+  color: #92400e;
+  margin-bottom: 1rem;
+}
+
+.no-results-message ul {
+  text-align: left;
+  max-width: 500px;
+  margin: 1rem auto;
+}
+
+.empty-state,
+.empty-state-card {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: #6b7280;
+}
+
+.empty-state-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  margin: 2rem 0;
+}
+
+.empty-state-card h3 {
+  color: #374151;
+  margin-bottom: 0.5rem;
+}
+
+.btn {
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  text-decoration: none;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+}
+
+.btn--primary {
+  background: #3b82f6;
+  color: white;
+}
+
+.btn--primary:hover {
+  background: #2563eb;
+}
+
+.btn--secondary {
+  background: #9ca3af;
+  color: white;
+}
+
+.btn--secondary:hover {
+  background: #6b7280;
+}
+
+.btn--large {
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+}
+
+.form-select {
+  padding: 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: white;
+  font-size: 0.875rem;
+  min-width: 250px;
+}
+
+.btn-group {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.admin-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #e2e8f0;
+  background: white;
+}
+
+.admin-header h1 {
+  margin: 0;
+  color: #0f172a;
+}
+
+.text-muted {
+  color: #6b7280;
+  margin: 0.25rem 0 0 0;
+}
+
+/* Validity Score Styles */
+.validity-score-cell {
+  text-align: center;
+  padding: 0.75rem;
+}
+
+.validity-score-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.score-value {
+  font-weight: bold;
+  font-size: 0.875rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  min-width: 40px;
+}
+
+.score-value.score-1, .score-value.score-2 {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.score-value.score-3 {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.score-value.score-4, .score-value.score-5 {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.score-bar {
+  width: 50px;
+  height: 6px;
+  background: #e5e7eb;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.score-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #dc2626 0%, #d97706 50%, #16a34a 100%);
+  transition: width 0.3s ease;
+}
+
+.no-score {
+  color: #6b7280;
+  font-style: italic;
+  font-size: 0.875rem;
+}
+</style>

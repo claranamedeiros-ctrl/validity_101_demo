@@ -1,0 +1,253 @@
+<div class="main-header">
+  <nav class="breadcrumb">
+    <%= link_to "Prompts", "/prompt_engine/prompts", class: "breadcrumb-link" %>
+    <span class="breadcrumb-separator">›</span>
+    <%= link_to @prompt.name, "/prompt_engine/prompts/#{@prompt.id}", class: "breadcrumb-link" %>
+    <span class="breadcrumb-separator">›</span>
+    <%= link_to "Evaluation Sets", "/prompt_engine/prompts/#{@prompt.id}/eval_sets", class: "breadcrumb-link" %>
+    <span class="breadcrumb-separator">›</span>
+    <%= link_to @eval_set.name, "/prompt_engine/prompts/#{@prompt.id}/eval_sets/#{@eval_set.id}", class: "breadcrumb-link" %>
+    <span class="breadcrumb-separator">›</span>
+    <span class="breadcrumb-current">Run Evaluation</span>
+  </nav>
+
+  <div class="header-content">
+    <h1>Run Evaluation: <%= @eval_set.name %></h1>
+    <p class="text-muted">Select specific patents to evaluate, or run all <%= @total_test_cases %> test cases across <%= @patent_ids.count %> patents.</p>
+  </div>
+</div>
+
+<div class="container">
+  <%= form_with url: "/prompt_engine/prompts/#{@prompt.id}/eval_sets/#{@eval_set.id}/run", method: :post, local: true, class: "evaluation-form" do |form| %>
+    <div class="card">
+      <div class="card-header">
+        <h2>Patent Selection</h2>
+      </div>
+      <div class="card-body">
+        <div class="form-group">
+          <div class="selection-controls mb-4">
+            <label class="checkbox-container">
+              <%= check_box_tag "select_all", "1", false, id: "select-all-patents", class: "form-checkbox" %>
+              <span class="checkmark"></span>
+              <strong>Select All Patents (<%= @patent_ids.count %> patents, <%= @total_test_cases %> test cases)</strong>
+            </label>
+          </div>
+
+          <div class="patent-grid">
+            <% @patent_data.each do |patent| %>
+              <div class="patent-item">
+                <label class="checkbox-container patent-checkbox">
+                  <%= check_box_tag "patent_ids[]", patent[:id], false, class: "form-checkbox patent-checkbox-input", data: { test_cases: patent[:test_case_count] } %>
+                  <span class="checkmark"></span>
+                  <div class="patent-info">
+                    <div class="patent-id"><%= patent[:id] %></div>
+                    <div class="test-case-count"><%= patent[:test_case_count] %> test case<%= patent[:test_case_count] != 1 ? 's' : '' %></div>
+                  </div>
+                </label>
+              </div>
+            <% end %>
+          </div>
+        </div>
+
+        <div class="form-group mt-4">
+          <label class="form-label">
+            <strong>Evaluation Summary</strong>
+          </label>
+          <div class="summary-box">
+            <div class="summary-item">
+              <span class="summary-label">Total Test Cases:</span>
+              <span class="summary-value" id="total-cases"><%= @total_test_cases %></span>
+            </div>
+            <div class="summary-item">
+              <span class="summary-label">Selected:</span>
+              <span class="summary-value" id="selected-count">0</span>
+            </div>
+            <div class="summary-item">
+              <span class="summary-label">Estimated Cost:</span>
+              <span class="summary-value" id="estimated-cost">$0.00</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <%= form.submit "Start Evaluation", class: "btn btn-primary", id: "start-evaluation-btn", disabled: true %>
+          <%= link_to "Cancel", "/prompt_engine/prompts/#{@prompt.id}/eval_sets/#{@eval_set.id}", class: "btn btn-secondary" %>
+        </div>
+      </div>
+    </div>
+  <% end %>
+</div>
+
+<style>
+.evaluation-form .card {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.patent-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.5rem;
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 1rem;
+  background: #f8fafc;
+}
+
+.patent-item {
+  padding: 0.5rem;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+}
+
+.patent-info {
+  flex: 1;
+}
+
+.patent-id {
+  font-weight: 500;
+  color: #0f172a;
+}
+
+.test-case-count {
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-top: 0.125rem;
+}
+
+.checkbox-container {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  margin-bottom: 0;
+}
+
+.checkbox-container input[type="checkbox"] {
+  margin-right: 0.5rem;
+}
+
+.summary-box {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.summary-item {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.summary-item:last-child {
+  margin-bottom: 0;
+}
+
+.summary-label {
+  font-weight: 500;
+  color: #475569;
+}
+
+.summary-value {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.form-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.btn {
+  padding: 0.75rem 1.5rem;
+  border-radius: 6px;
+  text-decoration: none;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-primary {
+  background: #3b82f6;
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.btn-primary:disabled {
+  background: #94a3b8;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: #6b7280;
+  color: white;
+}
+
+.btn-secondary:hover {
+  background: #4b5563;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const selectAllCheckbox = document.getElementById('select-all-patents');
+  const patentCheckboxes = document.querySelectorAll('.patent-checkbox-input');
+  const selectedCountSpan = document.getElementById('selected-count');
+  const estimatedCostSpan = document.getElementById('estimated-cost');
+  const startButton = document.getElementById('start-evaluation-btn');
+
+  const COST_PER_TEST = 0.02; // Estimated cost per test case
+
+  function updateSummary() {
+    const checkedBoxes = document.querySelectorAll('.patent-checkbox-input:checked');
+    let totalTestCases = 0;
+
+    checkedBoxes.forEach(checkbox => {
+      const testCaseCount = parseInt(checkbox.dataset.testCases || '0');
+      totalTestCases += testCaseCount;
+    });
+
+    const estimatedCost = (totalTestCases * COST_PER_TEST).toFixed(2);
+
+    selectedCountSpan.textContent = totalTestCases;
+    estimatedCostSpan.textContent = `$${estimatedCost}`;
+    startButton.disabled = totalTestCases === 0;
+  }
+
+  function updateSelectAllState() {
+    const totalCheckboxes = patentCheckboxes.length;
+    const checkedCheckboxes = document.querySelectorAll('.patent-checkbox-input:checked').length;
+
+    selectAllCheckbox.indeterminate = checkedCheckboxes > 0 && checkedCheckboxes < totalCheckboxes;
+    selectAllCheckbox.checked = checkedCheckboxes === totalCheckboxes;
+  }
+
+  selectAllCheckbox.addEventListener('change', function() {
+    const isChecked = this.checked;
+    patentCheckboxes.forEach(checkbox => {
+      checkbox.checked = isChecked;
+    });
+    updateSummary();
+  });
+
+  patentCheckboxes.forEach(checkbox => {
+    checkbox.addEventListener('change', function() {
+      updateSelectAllState();
+      updateSummary();
+    });
+  });
+
+  // Initial update
+  updateSummary();
+});
+</script>

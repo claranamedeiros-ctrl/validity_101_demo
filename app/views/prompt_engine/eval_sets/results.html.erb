@@ -1,0 +1,536 @@
+<div class="main-header">
+  <nav class="breadcrumb">
+    <%= link_to "Prompts", "/prompt_engine/prompts", class: "breadcrumb-link" %>
+    <span class="breadcrumb-separator">›</span>
+    <%= link_to @prompt.name, "/prompt_engine/prompts/#{@prompt.id}", class: "breadcrumb-link" %>
+    <span class="breadcrumb-separator">›</span>
+    <%= link_to "Evaluation Sets", "/prompt_engine/prompts/#{@prompt.id}/eval_sets", class: "breadcrumb-link" %>
+    <span class="breadcrumb-separator">›</span>
+    <%= link_to @eval_set.name, "/prompt_engine/prompts/#{@prompt.id}/eval_sets/#{@eval_set.id}", class: "breadcrumb-link" %>
+    <span class="breadcrumb-separator">›</span>
+    <span class="breadcrumb-current">Results</span>
+  </nav>
+
+  <div class="header-content">
+    <h1>Evaluation Results: <%= @eval_set.name %></h1>
+    <p class="text-muted">Compare AI outputs with ground truth data</p>
+  </div>
+</div>
+
+<div class="container">
+  <!-- Run Selection -->
+  <div class="card mb-4">
+    <div class="card-header">
+      <h2>Select Evaluation Run</h2>
+    </div>
+    <div class="card-body">
+      <% if @eval_runs.any? %>
+        <%= form_with url: request.path, method: :get, local: true, class: "run-selection-form" do |form| %>
+          <%= form.hidden_field :mode, value: "results" %>
+          <div class="form-group">
+            <label for="run_id" class="form-label">Choose Run to Analyze:</label>
+            <%= form.select :run_id, options_from_collection_for_select(@eval_runs, :id, :display_name, params[:run_id]),
+                           { prompt: "Select evaluation run..." },
+                           { class: "form-control", onchange: "this.form.submit();" } %>
+          </div>
+        <% end %>
+
+        <div class="runs-grid">
+          <% @eval_runs.each do |run| %>
+            <div class="run-card <%= 'selected' if @selected_run&.id == run.id %>">
+              <div class="run-header">
+                <strong>Run #<%= run.id %></strong>
+                <span class="run-status status-<%= run.status %>"><%= run.status.humanize %></span>
+              </div>
+              <div class="run-details">
+                <div class="run-stat">
+                  <span class="stat-label">Success Rate:</span>
+                  <span class="stat-value">
+                    <%= run.total_count > 0 ? "#{((run.passed_count.to_f / run.total_count) * 100).round(1)}%" : "0%" %>
+                  </span>
+                </div>
+                <div class="run-stat">
+                  <span class="stat-label">Tests:</span>
+                  <span class="stat-value"><%= run.passed_count %>/<%= run.total_count %></span>
+                </div>
+                <div class="run-stat">
+                  <span class="stat-label">Created:</span>
+                  <span class="stat-value"><%= run.created_at.strftime("%m/%d %H:%M") %></span>
+                </div>
+              </div>
+
+              <!-- Progress Bar -->
+              <% if run.status == 'running' %>
+                <div class="progress-container">
+                  <%
+                    # Safely get metadata as Hash
+                    metadata = begin
+                      run.metadata.is_a?(Hash) ? run.metadata : (JSON.parse(run.metadata.to_s) rescue {})
+                    rescue
+                      {}
+                    end
+                    progress = metadata['progress'] || metadata[:progress] || 0
+                  %>
+                  <div class="progress">
+                    <div class="progress-bar" style="width: <%= progress %>%"></div>
+                  </div>
+                  <div class="progress-text">
+                    <%= progress.round(1) %>% - Processing <%= metadata['processed'] || metadata[:processed] || 0 %> of <%= metadata['total'] || metadata[:total] || 0 %>
+                    <button onclick="location.reload()" class="refresh-btn">↻</button>
+                  </div>
+                </div>
+              <% end %>
+            </div>
+          <% end %>
+        </div>
+      <% else %>
+        <div class="empty-state">
+          <p>No completed evaluation runs found.</p>
+          <%= link_to "Run New Evaluation", "/prompt_engine/prompts/#{@prompt.id}/eval_sets/#{@eval_set.id}?mode=run_form", class: "btn btn-primary" %>
+        </div>
+      <% end %>
+    </div>
+  </div>
+
+  <!-- Detailed Results -->
+  <% if @selected_run && @detailed_comparison %>
+    <div class="card">
+      <div class="card-header">
+        <h2>Detailed Comparison - Run #<%= @selected_run.id %></h2>
+        <div class="comparison-summary">
+          <div class="summary-stat">
+            <span class="stat-number"><%= @detailed_comparison.count { |c| c[:passed] } %></span>
+            <span class="stat-label">Passed</span>
+          </div>
+          <div class="summary-stat">
+            <span class="stat-number"><%= @detailed_comparison.count { |c| !c[:passed] } %></span>
+            <span class="stat-label">Failed</span>
+          </div>
+          <div class="summary-stat">
+            <span class="stat-number"><%= @detailed_comparison.count { |c| c[:differences].any? } %></span>
+            <span class="stat-label">With Differences</span>
+          </div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="table-responsive">
+          <table class="comparison-table">
+            <thead>
+              <tr>
+                <th rowspan="2">Patent ID</th>
+                <th rowspan="2">Claim</th>
+                <th rowspan="2">Status</th>
+                <th colspan="3">Ground Truth vs LLM Output Comparison</th>
+                <th rowspan="2">Summary</th>
+              </tr>
+              <tr>
+                <th>Subject Matter<br><small class="text-muted">Ground Truth | LLM Output</small></th>
+                <th>Inventive Concept<br><small class="text-muted">Ground Truth | LLM Output</small></th>
+                <th>Overall Eligibility<br><small class="text-muted">Ground Truth | LLM Output</small></th>
+              </tr>
+            </thead>
+            <tbody>
+              <% @detailed_comparison.each do |comparison| %>
+                <tr class="<%= comparison[:passed] ? 'row-success' : 'row-failure' %>">
+                  <td class="patent-id"><%= comparison[:patent_id] %></td>
+                  <td class="claim-number"><%= comparison[:claim_number] %></td>
+                  <td class="status">
+                    <span class="status-badge <%= comparison[:passed] ? 'status-pass' : 'status-fail' %>">
+                      <%= comparison[:passed] ? '✓ Pass' : '✗ Fail' %>
+                    </span>
+                  </td>
+                  <td class="field-comparison">
+                    <div class="comparison-cell">
+                      <div class="ground-truth">
+                        <span class="value-label">Ground Truth:</span>
+                        <span class="value-content ground-truth-value"><%= comparison[:expected][:subject_matter] || comparison[:expected]['subject_matter'] || 'N/A' %></span>
+                      </div>
+                      <div class="divider">|</div>
+                      <div class="llm-output">
+                        <span class="value-label">LLM Output:</span>
+                        <span class="value-content llm-value <%= (comparison[:actual]['subject_matter'] || comparison[:actual][:subject_matter]) == (comparison[:expected][:subject_matter] || comparison[:expected]['subject_matter']) ? 'match' : 'mismatch' %>"><%= comparison[:actual]['subject_matter'] || comparison[:actual][:subject_matter] || 'N/A' %></span>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="field-comparison">
+                    <div class="comparison-cell">
+                      <div class="ground-truth">
+                        <span class="value-label">Ground Truth:</span>
+                        <span class="value-content ground-truth-value"><%= comparison[:expected][:inventive_concept] || comparison[:expected]['inventive_concept'] || 'N/A' %></span>
+                      </div>
+                      <div class="divider">|</div>
+                      <div class="llm-output">
+                        <span class="value-label">LLM Output:</span>
+                        <span class="value-content llm-value <%= (comparison[:actual]['inventive_concept'] || comparison[:actual][:inventive_concept]) == (comparison[:expected][:inventive_concept] || comparison[:expected]['inventive_concept']) ? 'match' : 'mismatch' %>"><%= comparison[:actual]['inventive_concept'] || comparison[:actual][:inventive_concept] || 'N/A' %></span>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="field-comparison">
+                    <div class="comparison-cell">
+                      <div class="ground-truth">
+                        <span class="value-label">Ground Truth:</span>
+                        <span class="value-content ground-truth-value"><%= comparison[:expected][:overall_eligibility] || comparison[:expected]['overall_eligibility'] || 'N/A' %></span>
+                      </div>
+                      <div class="divider">|</div>
+                      <div class="llm-output">
+                        <span class="value-label">LLM Output:</span>
+                        <span class="value-content llm-value <%= (comparison[:actual]['overall_eligibility'] || comparison[:actual][:overall_eligibility]) == (comparison[:expected][:overall_eligibility] || comparison[:expected]['overall_eligibility']) ? 'match' : 'mismatch' %>"><%= comparison[:actual]['overall_eligibility'] || comparison[:actual][:overall_eligibility] || 'N/A' %></span>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="differences">
+                    <% if comparison[:differences].any? %>
+                      <ul class="diff-list">
+                        <% comparison[:differences].each do |diff| %>
+                          <li class="diff-item">
+                            <strong><%= diff[:field] %>:</strong>
+                            <span class="diff-values">
+                              '<%= diff[:actual] %>' ≠ '<%= diff[:expected] %>'
+                            </span>
+                          </li>
+                        <% end %>
+                      </ul>
+                    <% else %>
+                      <span class="no-differences">No differences</span>
+                    <% end %>
+                  </td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  <% end %>
+</div>
+
+<style>
+.container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+.runs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.run-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 1rem;
+  background: white;
+  transition: all 0.2s;
+}
+
+.run-card:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.run-card.selected {
+  border-color: #3b82f6;
+  background: #f0f9ff;
+}
+
+.run-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.run-status {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.status-completed { background: #dcfce7; color: #166534; }
+.status-running { background: #fef3c7; color: #92400e; }
+.status-failed { background: #fee2e2; color: #991b1b; }
+
+.run-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.run-stat {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.875rem;
+}
+
+.stat-label { color: #6b7280; }
+.stat-value { font-weight: 500; }
+
+.progress-container {
+  margin-top: 1rem;
+}
+
+.progress {
+  width: 100%;
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+
+.progress-bar {
+  height: 100%;
+  background: #3b82f6;
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.refresh-btn {
+  background: none;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  padding: 0.125rem 0.375rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.refresh-btn:hover {
+  background: #f9fafb;
+}
+
+.comparison-summary {
+  display: flex;
+  gap: 2rem;
+  margin-left: auto;
+}
+
+.summary-stat {
+  text-align: center;
+}
+
+.stat-number {
+  display: block;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.stat-label {
+  display: block;
+  font-size: 0.75rem;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.comparison-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.comparison-table th,
+.comparison-table td {
+  padding: 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #e5e7eb;
+  vertical-align: top;
+}
+
+.comparison-table th {
+  background: #f9fafb;
+  font-weight: 600;
+  color: #374151;
+}
+
+.row-success {
+  background: #f0fdf4;
+}
+
+.row-failure {
+  background: #fef2f2;
+}
+
+.patent-id {
+  font-family: monospace;
+  font-weight: 500;
+}
+
+.claim-number {
+  text-align: center;
+  font-weight: 500;
+}
+
+.status-badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.status-pass {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-fail {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.field-comparison {
+  min-width: 250px;
+  padding: 0.5rem;
+}
+
+.comparison-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.ground-truth, .llm-output {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.375rem;
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+
+.ground-truth {
+  background: #f0f9ff;
+  border-left: 3px solid #0ea5e9;
+}
+
+.llm-output {
+  background: #fefce8;
+  border-left: 3px solid #eab308;
+}
+
+.value-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6b7280;
+}
+
+.value-content {
+  font-weight: 500;
+  font-size: 0.875rem;
+}
+
+.ground-truth-value {
+  color: #0c4a6e;
+}
+
+.llm-value {
+  color: #92400e;
+}
+
+.llm-value.match {
+  color: #166534;
+  background: #dcfce7;
+  padding: 0.125rem 0.25rem;
+  border-radius: 3px;
+}
+
+.llm-value.mismatch {
+  color: #991b1b;
+  background: #fee2e2;
+  padding: 0.125rem 0.25rem;
+  border-radius: 3px;
+}
+
+.divider {
+  text-align: center;
+  color: #d1d5db;
+  font-weight: bold;
+  font-size: 1.2rem;
+  margin: 0.25rem 0;
+}
+
+.differences {
+  min-width: 200px;
+}
+
+.diff-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.diff-item {
+  margin-bottom: 0.25rem;
+  font-size: 0.75rem;
+}
+
+.diff-values {
+  color: #dc2626;
+  font-family: monospace;
+}
+
+.no-differences {
+  color: #16a34a;
+  font-size: 0.75rem;
+  font-style: italic;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 2rem;
+  color: #6b7280;
+}
+
+.btn {
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  text-decoration: none;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-primary {
+  background: #3b82f6;
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #2563eb;
+}
+
+.table-responsive {
+  overflow-x: auto;
+}
+</style>
+
+<script>
+// Auto-refresh for running evaluations
+document.addEventListener('DOMContentLoaded', function() {
+  const runningCards = document.querySelectorAll('.run-card .status-running');
+
+  if (runningCards.length > 0) {
+    // Refresh every 5 seconds if there are running evaluations
+    setTimeout(function() {
+      location.reload();
+    }, 5000);
+  }
+});
+</script>

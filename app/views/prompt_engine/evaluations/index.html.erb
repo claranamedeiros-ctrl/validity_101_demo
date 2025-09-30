@@ -1,0 +1,202 @@
+<div class="admin-header">
+  <div>
+    <h1>Evaluations</h1>
+    <p class="text-muted">Manage evaluation sets and view results across all prompts</p>
+  </div>
+  <div class="btn-group">
+    <%= link_to prompt_eval_set_path(1, 2, mode: 'run_form'), class: "btn btn--primary btn--large" do %>
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+      </svg>
+      Run Alice Test
+    <% end %>
+  </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="metrics-summary mb-lg">
+  <div class="metrics-card">
+    <div class="metrics-card__icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+      </svg>
+    </div>
+    <div class="metrics-card__content">
+      <h3 class="metrics-card__label">Evaluation Sets</h3>
+      <p class="metrics-card__value"><%= @total_eval_sets %></p>
+    </div>
+  </div>
+
+  <div class="metrics-card">
+    <div class="metrics-card__icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+      </svg>
+    </div>
+    <div class="metrics-card__content">
+      <h3 class="metrics-card__label">Total Runs</h3>
+      <p class="metrics-card__value"><%= @total_eval_runs %></p>
+    </div>
+  </div>
+
+  <div class="metrics-card">
+    <div class="metrics-card__icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M9 11l3 3L22 4"></path>
+        <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"></path>
+      </svg>
+    </div>
+    <div class="metrics-card__content">
+      <h3 class="metrics-card__label">Test Cases</h3>
+      <p class="metrics-card__value"><%= @total_test_cases %></p>
+    </div>
+  </div>
+
+  <div class="metrics-card">
+    <div class="metrics-card__icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+      </svg>
+    </div>
+    <div class="metrics-card__content">
+      <h3 class="metrics-card__label">Overall Pass Rate</h3>
+      <p class="metrics-card__value"><%= number_to_percentage(@overall_pass_rate, precision: 1) %></p>
+    </div>
+  </div>
+</div>
+
+<!-- Prompts with Evaluation Sets -->
+<div class="card mb-lg">
+  <div class="card__header">
+    <h3 class="card__title">Prompts with Evaluations</h3>
+  </div>
+  <div class="card__body">
+    <% if @prompts_with_eval_sets.any? %>
+      <div class="eval-prompts-list">
+        <% @prompts_with_eval_sets.each do |prompt| %>
+          <div class="eval-prompt-item">
+            <div class="eval-prompt-header">
+              <h4 class="eval-prompt-title">
+                <%= link_to prompt.name, prompt_path(prompt), class: "table__link" %>
+              </h4>
+              <span class="table__badge table__badge--<%= prompt.status %>">
+                <%= prompt.status %>
+              </span>
+            </div>
+            
+            <div class="eval-sets-grid">
+              <% prompt.eval_sets.each do |eval_set| %>
+                <div class="eval-set-card">
+                  <div class="eval-set-card__header">
+                    <h5 class="eval-set-card__title">
+                      <%= link_to eval_set.name, prompt_eval_set_path(prompt, eval_set), class: "table__link" %>
+                    </h5>
+                    <div class="eval-set-card__stats">
+                      <span class="eval-set-card__stat">
+                        <%= pluralize(eval_set.test_cases.count, 'test') %>
+                      </span>
+                      <span class="eval-set-card__stat">
+                        <%= pluralize(eval_set.eval_runs.count, 'run') %>
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <% if eval_set.description.present? %>
+                    <p class="eval-set-card__description">
+                      <%= truncate(eval_set.description, length: 100) %>
+                    </p>
+                  <% end %>
+                  
+                  <div class="eval-set-card__actions">
+                    <%= link_to "View", prompt_eval_set_path(prompt, eval_set), 
+                        class: "btn btn--secondary btn--small" %>
+                    <% if eval_set.eval_runs.where(status: 'completed').any? %>
+                      <%= link_to "Metrics", metrics_prompt_eval_set_path(prompt, eval_set), 
+                          class: "btn btn--secondary btn--small" %>
+                    <% end %>
+                  </div>
+                </div>
+              <% end %>
+            </div>
+          </div>
+        <% end %>
+      </div>
+    <% else %>
+      <div class="table-empty">
+        <p class="text-muted">No evaluation sets created yet.</p>
+        <p class="text-muted">Create evaluation sets from the prompt details page.</p>
+        <%= link_to "View Prompts", prompts_path, class: "btn btn--primary btn--medium mt-md" %>
+      </div>
+    <% end %>
+  </div>
+</div>
+
+<!-- Recent Activity -->
+<div class="card">
+  <div class="card__header">
+    <h3 class="card__title">Recent Evaluation Activity</h3>
+  </div>
+  <div class="card__body">
+    <% if @recent_runs.any? %>
+      <div class="table-container">
+        <table class="table table--simple">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Prompt</th>
+              <th>Evaluation Set</th>
+              <th>Status</th>
+              <th>Results</th>
+              <th class="table__actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% @recent_runs.each do |run| %>
+              <tr>
+                <td>
+                  <div class="table__primary">
+                    <%= run.created_at.strftime("%b %d, %Y %I:%M %p") %>
+                  </div>
+                </td>
+                <td>
+                  <%= link_to run.eval_set.prompt.name, prompt_path(run.eval_set.prompt), 
+                      class: "table__link" %>
+                </td>
+                <td>
+                  <%= link_to run.eval_set.name, prompt_eval_set_path(run.eval_set.prompt, run.eval_set), 
+                      class: "table__link" %>
+                </td>
+                <td>
+                  <span class="table__badge table__badge--<%= run.status %>">
+                    <%= run.status.humanize %>
+                  </span>
+                </td>
+                <td>
+                  <% if run.status == 'completed' && run.total_count > 0 %>
+                    <% success_rate = (run.passed_count.to_f / run.total_count * 100) %>
+                    <div class="table__metric">
+                      <span class="table__metric-value 
+                        <%= success_rate >= 80 ? 'text-success' : success_rate >= 60 ? 'text-warning' : 'text-danger' %>">
+                        <%= number_to_percentage(success_rate, precision: 1) %>
+                      </span>
+                    </div>
+                  <% else %>
+                    <span class="table__secondary text-muted">—</span>
+                  <% end %>
+                </td>
+                <td class="table__actions">
+                  <%= link_to "View", metrics_prompt_eval_set_path(run.eval_set.prompt, run.eval_set),
+                      class: "table__action" %>
+                </td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    <% else %>
+      <div class="table-empty">
+        <p class="text-muted">No evaluation runs yet.</p>
+      </div>
+    <% end %>
+  </div>
+</div>

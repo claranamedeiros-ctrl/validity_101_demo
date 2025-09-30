@@ -1,0 +1,162 @@
+<!-- Header -->
+<div class="bg-white shadow-sm">
+  <div class="px-6 py-8">
+    <div class="max-w-4xl mx-auto">
+      <h1 class="text-3xl font-bold text-gray-900">Validity Analysis Result</h1>
+      <p class="mt-2 text-gray-600">AI-powered patent claim analysis using Alice Test methodology</p>
+    </div>
+  </div>
+</div>
+
+<!-- Results -->
+<div class="max-w-4xl mx-auto mt-8">
+  <div class="bg-white shadow-sm rounded-lg">
+    <div class="px-6 py-8">
+      <!-- Status -->
+      <div class="mb-8">
+        <div class="flex items-center">
+          <% if @result[:status] == "success" %>
+            <div class="flex-shrink-0">
+              <svg class="h-6 w-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div class="ml-3">
+              <p class="text-lg font-medium text-green-800">Analysis Complete</p>
+            </div>
+          <% else %>
+            <div class="flex-shrink-0">
+              <svg class="h-6 w-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div class="ml-3">
+              <p class="text-lg font-medium text-red-800">Analysis Failed</p>
+            </div>
+          <% end %>
+        </div>
+        <% if @result[:status_message].present? %>
+          <div class="mt-2 ml-9">
+            <p class="text-sm text-gray-600"><%= @result[:status_message] %></p>
+          </div>
+        <% end %>
+      </div>
+
+      <!-- Analysis Results Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Patent Information -->
+        <div class="bg-gray-50 rounded-lg p-6">
+          <h3 class="text-lg font-medium text-gray-900 mb-4">Patent Information</h3>
+          <dl class="space-y-3">
+            <div>
+              <dt class="text-sm font-medium text-gray-500">Patent Number</dt>
+              <dd class="text-sm text-gray-900 font-mono"><%= @result[:patent_number] %></dd>
+            </div>
+            <div>
+              <dt class="text-sm font-medium text-gray-500">Claim Number</dt>
+              <dd class="text-sm text-gray-900"><%= @result[:claim_number] %></dd>
+            </div>
+          </dl>
+        </div>
+
+        <!-- Analysis Results -->
+        <div class="bg-gray-50 rounded-lg p-6">
+          <h3 class="text-lg font-medium text-gray-900 mb-4">Analysis Results</h3>
+          <dl class="space-y-3">
+            <div>
+              <dt class="text-sm font-medium text-gray-500">Subject Matter</dt>
+              <dd class="text-sm text-gray-900">
+                <% case @result[:subject_matter] %>
+                <% when 'abstract' %>
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                    Abstract Idea
+                  </span>
+                <% when 'natural_phenomenon' %>
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                    Natural Phenomenon
+                  </span>
+                <% when 'patentable' %>
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    Patentable
+                  </span>
+                <% else %>
+                  <span class="text-gray-600"><%= @result[:subject_matter] %></span>
+                <% end %>
+              </dd>
+            </div>
+
+            <div>
+              <dt class="text-sm font-medium text-gray-500">Inventive Concept</dt>
+              <dd class="text-sm text-gray-900">
+                <% case @result[:inventive_concept] %>
+                <% when 'inventive' %>
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    Inventive
+                  </span>
+                <% when 'uninventive' %>
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                    Uninventive
+                  </span>
+                <% when 'skipped' %>
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                    Skipped
+                  </span>
+                <% else %>
+                  <span class="text-gray-600"><%= @result[:inventive_concept] %></span>
+                <% end %>
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+
+      <!-- Overall Assessment -->
+      <div class="mt-8 bg-primary-50 rounded-lg p-6">
+        <h3 class="text-lg font-medium text-gray-900 mb-4">Overall Assessment</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <dt class="text-sm font-medium text-gray-500 mb-2">Eligibility Status</dt>
+            <dd class="text-lg font-semibold">
+              <% case @result[:overall_eligibility] %>
+              <% when 'eligible' %>
+                <span class="text-green-700">✓ Patent Eligible</span>
+              <% when 'ineligible' %>
+                <span class="text-red-700">✗ Patent Ineligible</span>
+              <% else %>
+                <span class="text-gray-700"><%= @result[:overall_eligibility] %></span>
+              <% end %>
+            </dd>
+          </div>
+
+          <div>
+            <dt class="text-sm font-medium text-gray-500 mb-2">Validity Score</dt>
+            <dd class="text-lg font-semibold">
+              <% score = @result[:validity_score].to_i %>
+              <% if score >= 4 %>
+                <span class="text-green-700"><%= score %>/5 - Strong</span>
+              <% elsif score >= 3 %>
+                <span class="text-yellow-700"><%= score %>/5 - Moderate</span>
+              <% else %>
+                <span class="text-red-700"><%= score %>/5 - Weak</span>
+              <% end %>
+            </dd>
+          </div>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="mt-8 pt-6 border-t border-gray-200">
+        <div class="flex space-x-4">
+          <%= link_to "Analyze Another Patent",
+              new_validity_path,
+              class: "inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors" %>
+
+          <%= link_to "Manage Prompts",
+              "/prompt_engine",
+              target: "_blank",
+              class: "inline-flex items-center px-6 py-3 border border-gray-300 text-base font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors" %>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
