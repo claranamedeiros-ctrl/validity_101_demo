@@ -725,3 +725,299 @@ The controller properly transforms ground truth values to match LLM schema:
 - **Button Styling**: Fixed grey button colors for better UX (#9ca3af hover #6b7280)
 
 **System is now fully operational and ready for patent validity evaluations.**
+
+---
+
+## 🚀 Railway.com Deployment Guide (September 30, 2025)
+
+### Overview
+This section documents all deployment issues encountered and resolved when deploying the patent validity evaluation system to Railway.com. **Essential reading for future developers planning Railway deployments.**
+
+### Railway.com Platform Benefits
+- **Free Tier**: $5/month credit (sufficient for small apps)
+- **PostgreSQL**: Automatic provisioning in production
+- **GitHub Integration**: Direct deployment from repository
+- **Nixpacks Builder**: Automatic Rails app detection
+- **Environment Variables**: Easy configuration management
+
+### 🚨 CRITICAL DEPLOYMENT ERRORS ENCOUNTERED & FIXES
+
+#### **Error 1: PostgreSQL Gem Platform Compatibility**
+```bash
+ERROR: Could not find gems matching 'pg (~> 1.1)' valid for all resolution platforms
+```
+
+**Root Cause**: Gemfile.lock was missing x86_64-linux platform for Railway's Linux servers
+
+**Solution**:
+```bash
+bundle lock --add-platform x86_64-linux
+```
+
+**Fix Applied**: Added x86_64-linux platform to Gemfile.lock and set `BUNDLE_FORCE_RUBY_PLATFORM = "1"` in railway.toml
+
+#### **Error 2: Sprockets Asset Pipeline - Empty Images Directory**
+```bash
+Sprockets::ArgumentError: link_tree argument must be a directory
+```
+
+**Root Cause**: `app/assets/images` directory was empty, causing asset pipeline failure
+
+**Solution**: Created `.keep` file in images directory
+```bash
+touch app/assets/images/.keep
+```
+
+#### **Error 3: Database Schema Corruption**
+```bash
+SQLite3::SQLException: no such table: main.prompt_engine_prompt_versions
+```
+
+**Root Cause**: schema.rb was corrupted and Railway couldn't create proper PostgreSQL tables
+
+**Solution**:
+1. Copied all PromptEngine gem migrations to `db/migrate/`
+2. Changed Procfile from `db:schema:load` to `db:migrate`
+3. Used migrations instead of corrupted schema
+
+#### **Error 4: Missing Production Environment Configuration**
+```bash
+Rails application failed to start - missing config/environments/production.rb
+```
+
+**Root Cause**: Rails app was missing critical production environment files
+
+**Solution**: Created complete production configuration with Railway-specific settings
+
+#### **Error 5: Missing Test Environment Configuration**
+Railway build process expected test environment configuration
+
+**Solution**: Created `config/environments/test.rb` for complete environment setup
+
+#### **Error 6: Database Seeding Failures**
+```bash
+bin/rails aborted! - db:seed task failed
+```
+
+**Root Cause**: No seeds.rb file for database initialization
+
+**Solution**: Created safe seeding logic with duplicate prevention
+
+#### **Error 7: Asset Compilation Not Configured**
+CSS and JavaScript assets weren't being compiled during build
+
+**Solution**: Added asset precompilation to railway.toml build process
+
+### 📁 Files Created for Railway Deployment
+
+#### **1. Production Environment (`config/environments/production.rb`)**
+```ruby
+Rails.application.configure do
+  config.eager_load = true
+  config.consider_all_requests_local = false
+  config.force_ssl = false
+  config.assume_ssl = true
+
+  # Railway-specific configuration
+  if ENV['RAILWAY_ENVIRONMENT'] == 'production'
+    config.hosts << ENV['RAILWAY_PUBLIC_DOMAIN'] if ENV['RAILWAY_PUBLIC_DOMAIN']
+    config.hosts << /.*\.railway\.app$/
+  end
+
+  # Asset pipeline
+  config.assets.compile = false
+  config.assets.digest = true
+  config.assets.precompile += %w( application.js application.css )
+
+  # Logging
+  config.log_tags = [:request_id]
+  config.logger = ActiveSupport::TaggedLogging.logger(STDOUT)
+  config.log_level = ENV.fetch("RAILS_LOG_LEVEL", "info")
+end
+```
+
+#### **2. Test Environment (`config/environments/test.rb`)**
+```ruby
+Rails.application.configure do
+  config.enable_reloading = false
+  config.eager_load = ENV["CI"].present?
+  config.consider_all_requests_local = true
+  config.action_controller.allow_forgery_protection = false
+  config.action_mailer.delivery_method = :test
+end
+```
+
+#### **3. Database Seeds (`db/seeds.rb`)**
+```ruby
+if PromptEngine::Setting.count == 0
+  PromptEngine::Setting.create!(
+    openai_api_key: nil, # Set via environment variable
+    anthropic_api_key: nil,
+    preferences: {}
+  )
+  puts "✅ Created default PromptEngine settings"
+else
+  puts "⏭️  PromptEngine settings already exist, skipping seed"
+end
+```
+
+#### **4. Railway Configuration (`railway.toml`)**
+```toml
+[build]
+builder = "NIXPACKS"
+buildCommand = "bundle exec rails assets:precompile"
+
+[build.environment]
+BUNDLE_FORCE_RUBY_PLATFORM = "1"
+RAILS_ENV = "production"
+
+[deploy]
+startCommand = "bundle exec rails server -b 0.0.0.0 -p $PORT"
+healthcheckPath = "/prompt_engine"
+healthcheckTimeout = 100
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+```
+
+#### **5. Procfile for Alternative Deployment**
+```
+web: bundle exec rails server -b 0.0.0.0 -p $PORT
+release: bundle exec rails db:create db:migrate db:seed
+```
+
+### 🛠 Step-by-Step Railway Deployment Process
+
+#### **1. Prepare Application**
+```bash
+# Add PostgreSQL for production
+bundle add pg --group production
+
+# Update database configuration
+# Edit config/database.yml - add PostgreSQL production config
+
+# Add platform compatibility
+bundle lock --add-platform x86_64-linux
+
+# Ensure asset directories exist
+touch app/assets/images/.keep
+
+# Copy PromptEngine migrations
+cp /opt/homebrew/lib/ruby/gems/*/gems/prompt_engine-*/db/migrate/* db/migrate/
+```
+
+#### **2. Create Railway Configuration**
+- Create `railway.toml` with build and deploy settings
+- Create `Procfile` as backup deployment method
+- Create production environment configuration
+- Create database seeds file
+
+#### **3. Git Repository Setup**
+```bash
+git init
+git add .
+git commit -m "Initial commit with Railway deployment configuration"
+git remote add origin https://github.com/username/repository.git
+git push -u origin main
+```
+
+#### **4. Railway Deployment**
+1. Visit [railway.app](https://railway.app)
+2. Sign in with GitHub account
+3. Click "New Project" → "Deploy from GitHub repo"
+4. Select your repository
+5. Railway auto-detects Rails app and uses railway.toml
+6. Add environment variable: `OPENAI_API_KEY`
+7. Railway automatically provisions PostgreSQL database
+8. Click "Deploy"
+
+#### **5. Environment Variables Required**
+- `OPENAI_API_KEY`: Your OpenAI API key for LLM interactions
+- `DATABASE_URL`: Automatically set by Railway PostgreSQL service
+- `RAILS_MASTER_KEY`: Automatically handled by Rails credentials
+
+### ⚠️ Common Pitfalls to Avoid
+
+#### **1. Platform Compatibility**
+- **NEVER** deploy without adding x86_64-linux platform to Gemfile.lock
+- **ALWAYS** set `BUNDLE_FORCE_RUBY_PLATFORM = "1"` in build environment
+
+#### **2. Environment Files**
+- **NEVER** deploy without production.rb and test.rb environment files
+- **ALWAYS** create Railway-specific host configurations
+
+#### **3. Asset Pipeline**
+- **NEVER** assume assets will compile automatically
+- **ALWAYS** ensure asset directories exist (use .keep files)
+- **ALWAYS** configure asset precompilation in build process
+
+#### **4. Database Setup**
+- **NEVER** rely on schema.rb if it's corrupted
+- **ALWAYS** use migrations for reliable database setup
+- **ALWAYS** copy engine/gem migrations to your project
+
+#### **5. Seeds and Initialization**
+- **NEVER** skip database seeding configuration
+- **ALWAYS** implement safe seeding with duplicate prevention
+- **ALWAYS** handle missing initial data gracefully
+
+### 🎯 Deployment Checklist
+
+**Before Deploying to Railway:**
+- [ ] Add pg gem to production group in Gemfile
+- [ ] Add x86_64-linux platform to Gemfile.lock
+- [ ] Create config/environments/production.rb
+- [ ] Create config/environments/test.rb
+- [ ] Create db/seeds.rb with safe initialization
+- [ ] Create railway.toml with build configuration
+- [ ] Ensure app/assets/images/.keep exists
+- [ ] Copy any engine/gem migrations to db/migrate/
+- [ ] Update config/database.yml for PostgreSQL production
+- [ ] Commit and push all changes to GitHub
+- [ ] Test locally in production mode if possible
+
+**During Railway Setup:**
+- [ ] Connect GitHub repository
+- [ ] Add OPENAI_API_KEY environment variable
+- [ ] Verify PostgreSQL service is provisioned
+- [ ] Check deployment logs for any errors
+- [ ] Test health check endpoint (/prompt_engine)
+
+**After Deployment:**
+- [ ] Verify app loads at Railway URL
+- [ ] Test authentication (admin/secret123)
+- [ ] Verify patent selection interface works
+- [ ] Run a small evaluation to test LLM integration
+- [ ] Check that ground truth data loads correctly
+
+### 📋 Deployment Commands Reference
+
+```bash
+# Platform compatibility
+bundle lock --add-platform x86_64-linux
+
+# Asset precompilation (test locally)
+RAILS_ENV=production bundle exec rails assets:precompile
+
+# Database setup (test locally with PostgreSQL)
+RAILS_ENV=production bundle exec rails db:create db:migrate db:seed
+
+# Production server test (local)
+RAILS_ENV=production bundle exec rails server
+```
+
+### 🔗 Final Railway Deployment URLs
+- **Main App**: `https://your-app-name.railway.app`
+- **Health Check**: `https://your-app-name.railway.app/prompt_engine`
+- **Patent Selection**: `https://your-app-name.railway.app/prompt_engine/prompts/1/eval_sets/2?mode=run_form`
+
+### 💡 Key Lessons for Future Developers
+
+1. **Railway.com is excellent for Rails deployment** - automatic PostgreSQL, GitHub integration, and reasonable free tier
+2. **Platform compatibility is critical** - always add Linux platform for deployment
+3. **Environment files are not optional** - create complete production/test configurations
+4. **Asset pipeline needs explicit configuration** - don't assume it works automatically
+5. **Copy engine migrations** - don't rely on schema.rb for complex gem dependencies
+6. **Test the deployment process** - use staging/test deployments before production
+7. **Monitor the build logs** - Railway provides excellent debugging information
+
+**This guide should prevent future developers from encountering the same deployment issues we resolved.**
