@@ -9,8 +9,8 @@ DATABASE_URL = "$DATABASE_URL"
 
 [deploy]
 startCommand = "bundle exec rails server -b 0.0.0.0 -p $PORT"
-healthcheckPath = "/prompt_engine"
-healthcheckTimeout = 100
+healthcheckPath = "/up"
+healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
