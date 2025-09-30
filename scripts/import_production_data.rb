@@ -39,20 +39,8 @@ end
 
 puts "✅ Created/Updated Prompt: #{prompt.name} (ID: #{prompt.id})"
 
-# Step 2: Create prompt version if needed
-if prompt.prompt_versions.empty?
-  version = prompt.prompt_versions.create!(
-    version_number: 1,
-    system_message: prompt.system_message,
-    content: prompt.content,
-    model: prompt.model,
-    temperature: prompt.temperature,
-    max_tokens: prompt.max_tokens
-  )
-  puts "✅ Created Prompt Version: v#{version.version_number}"
-else
-  puts "⏭️  Prompt version already exists"
-end
+# Step 2: Skip prompt version (PromptEngine may not have this association)
+puts "⏭️  Skipping prompt version creation (not needed for evaluation)"
 
 # Step 3: Create evaluation set
 eval_set = PromptEngine::EvalSet.find_or_create_by!(prompt: prompt, name: "Patent Validity Test Cases") do |es|
