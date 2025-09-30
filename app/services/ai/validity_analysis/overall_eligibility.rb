@@ -1,5 +1,5 @@
 # frozen_string_literal: true
-module AI
+module Ai
   module ValidityAnalysis
     class OverallEligibility
       OVERALL_ELIGIBILITY_ERROR_MESSAGE =

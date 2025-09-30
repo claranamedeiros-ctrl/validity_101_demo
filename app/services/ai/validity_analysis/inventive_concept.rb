@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module AI
+module Ai
   module ValidityAnalysis
     class InventiveConcept
       MAPPING = {

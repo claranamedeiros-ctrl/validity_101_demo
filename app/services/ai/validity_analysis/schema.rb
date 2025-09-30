@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module AI
+module Ai
   module ValidityAnalysis
     class Schema < RubyLLM::Schema
       string :patent_number, description: 'The patent number as inputted by the user'

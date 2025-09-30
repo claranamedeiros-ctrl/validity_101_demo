@@ -3,7 +3,7 @@
 require_relative 'overall_eligibility'
 require_relative 'validity_score'
 
-module AI
+module Ai
   module ValidityAnalysis
     class Service
       LLM_TEMPERATURE = 0.1
@@ -57,7 +57,7 @@ module AI
         raw = response.content.with_indifferent_access # Hash: {patent_number, claim_number, subject_matter, inventive_concept, validity_score}
 
         # 3) Infer eligibility (using raw values first  mirroring your backend)
-        eligibility = AI::ValidityAnalysis::OverallEligibility.new(
+        eligibility = Ai::ValidityAnalysis::OverallEligibility.new(
           subject_matter: raw[:subject_matter],
           inventive_concept: raw[:inventive_concept]
         )
@@ -70,7 +70,7 @@ module AI
         end
 
         # 4) Normalize score against inferred eligibility
-        vs = AI::ValidityAnalysis::ValidityScore.new(
+        vs = Ai::ValidityAnalysis::ValidityScore.new(
           validity_score: raw[:validity_score],
           overall_eligibility: eligibility.value
         )
