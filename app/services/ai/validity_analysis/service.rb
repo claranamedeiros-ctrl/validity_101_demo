@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'subject_matter'
+require_relative 'inventive_concept'
 require_relative 'overall_eligibility'
 require_relative 'validity_score'
 
@@ -20,7 +22,8 @@ module Ai
             abstract: abstract
           }
         )
-        # 2) Execute with RubyLLM and our Schema (system + user)
+
+        # 2) Execute with RubyLLM and Backend Schema (MUST match backend/schema.rb exactly!)
         schema = {
           type: "object",
           properties: {
@@ -28,19 +31,19 @@ module Ai
             claim_number: { type: "number", description: "The claim number evaluated for the patent, as inputted by the user" },
             subject_matter: {
               type: "string",
-              enum: ["abstract", "natural_phenomenon", "patentable"],
-              description: "The subject matter of the claim"
+              enum: ["Abstract", "Natural Phenomenon", "Not Abstract/Not Natural Phenomenon"],
+              description: "The output determined for Alice Step One"
             },
             inventive_concept: {
               type: "string",
-              enum: ["inventive", "uninventive", "skipped"],
-              description: "The inventive concept of the claim"
+              enum: ["No", "Yes", "-"],
+              description: "The output determined for Alice Step Two"
             },
             validity_score: {
               type: "number",
               minimum: 1,
               maximum: 5,
-              description: "Score from 1 to 5 with the validity strength"
+              description: "The validity score from 1 to 5 determined for the patent claim"
             }
           },
           required: ["patent_number", "claim_number", "subject_matter", "inventive_concept", "validity_score"],
@@ -54,42 +57,54 @@ module Ai
                        .with_instructions(rendered[:system_message].to_s)
                        .ask(rendered[:content].to_s)
 
-        raw = response.content.with_indifferent_access # Hash: {patent_number, claim_number, subject_matter, inventive_concept, validity_score}
+        raw = response.content.with_indifferent_access
 
-        # 3) Infer eligibility (using raw values first  mirroring your backend)
-        eligibility = Ai::ValidityAnalysis::OverallEligibility.new(
-          subject_matter: raw[:subject_matter],
-          inventive_concept: raw[:inventive_concept]
+        # 3) Map LLM output through backend mapping classes (backend/service.rb:69-79)
+        subject_matter_obj = Ai::ValidityAnalysis::SubjectMatter.new(
+          llm_subject_matter: raw[:subject_matter]
         )
 
-        if eligibility.invalid?
+        inventive_concept_obj = Ai::ValidityAnalysis::InventiveConcept.new(
+          llm_inventive_concept: raw[:inventive_concept],
+          subject_matter: subject_matter_obj.value
+        )
+
+        # 4) Determine overall eligibility (backend/service.rb:88-93)
+        overall_eligibility_obj = Ai::ValidityAnalysis::OverallEligibility.new(
+          subject_matter: subject_matter_obj.value,
+          inventive_concept: inventive_concept_obj.value
+        )
+
+        if overall_eligibility_obj.invalid?
           return {
             status: :error,
-            status_message: eligibility.error_message || ERROR_MESSAGE
+            status_message: overall_eligibility_obj.error_message || ERROR_MESSAGE
           }
         end
 
-        # 4) Normalize score against inferred eligibility
-        vs = Ai::ValidityAnalysis::ValidityScore.new(
+        # 5) Normalize validity score (backend/service.rb:82-86)
+        validity_score_obj = Ai::ValidityAnalysis::ValidityScore.new(
           validity_score: raw[:validity_score],
-          overall_eligibility: eligibility.value
+          overall_eligibility: overall_eligibility_obj.value
         )
-        normalized_score = vs.forced_value
 
-        # 5) "Persist" step: replicate your backend by discarding Step-2 ONLY NOW if patentable
-        final_inventive = (raw[:subject_matter] == 'patentable') ? 'skipped' : raw[:inventive_concept]
+        # We log but don't fail on invalid scores (backend/service.rb:24-27)
+        if validity_score_obj.invalid?
+          Rails.logger.error { validity_score_obj.error_message }
+        end
 
+        # 6) Return with forced values (backend/service.rb:95-104)
         {
           status: :success,
           status_message: nil,
-          # echo inputs
+          # Echo inputs
           patent_number: raw[:patent_number] || patent_number,
           claim_number: raw[:claim_number] || claim_number.to_i,
-          # LLM fields (with late overwrite to mirror your backend)
-          subject_matter: raw[:subject_matter],
-          inventive_concept: final_inventive,
-          validity_score: normalized_score,
-          overall_eligibility: eligibility.value
+          # Mapped values using backend logic with forced_value methods
+          subject_matter: subject_matter_obj.value,
+          inventive_concept: inventive_concept_obj.forced_value, # Forces :skipped if patentable!
+          validity_score: validity_score_obj.forced_value, # Forces 3 or 2 if inconsistent!
+          overall_eligibility: overall_eligibility_obj.value
         }
       rescue => e
         Rails.logger.error("Validity 101 error: #{e.message}")
