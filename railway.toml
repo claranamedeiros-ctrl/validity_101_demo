@@ -1,6 +1,9 @@
 [build]
 builder = "NIXPACKS"
 
+[build.environment]
+BUNDLE_FORCE_RUBY_PLATFORM = "1"
+
 [deploy]
 startCommand = "bundle exec rails server -b 0.0.0.0 -p $PORT"
 healthcheckPath = "/prompt_engine"
