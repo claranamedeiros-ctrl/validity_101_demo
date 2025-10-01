@@ -142,13 +142,24 @@
                       # Get ground truth data
                       ground_truth = ground_truth_data[key] || {}
 
-                      # Map ground truth values to expected LLM output format
-                      expected_subject_matter = ground_truth[:subject_matter]
+                      # Map ground truth values to match LLM output format (based on backend rules)
+                      # Subject Matter: "abstract"/"not abstract" -> "abstract"/"patentable"
+                      expected_subject_matter = case ground_truth[:subject_matter]
+                        when 'abstract' then 'abstract'
+                        when 'not abstract' then 'patentable'
+                        when 'natural phenomenon' then 'natural_phenomenon'
+                        else ground_truth[:subject_matter]
+                      end
+
+                      # Inventive Concept: "ic found"/"no ic found" -> "inventive"/"uninventive"
                       expected_inventive_concept = case ground_truth[:inventive_concept]
                         when 'no ic found', 'nan' then 'uninventive'
                         when 'ic found' then 'inventive'
+                        when 'skipped' then 'skipped'
                         else ground_truth[:inventive_concept]
                       end
+
+                      # Overall Eligibility: already matches ("eligible"/"ineligible")
                       expected_overall = ground_truth[:overall_eligibility]
 
                       # Parse actual LLM output from stored result
@@ -191,7 +202,7 @@
                       <td class="comparison-cell">
                         <div class="comparison-pair">
                           <div class="expected-value <%= subject_matter_match ? 'match' : 'mismatch' %>">
-                            <%= expected_subject_matter || 'N/A' %>
+                            <%= ground_truth[:subject_matter] || 'N/A' %>
                           </div>
                           <div class="separator">|</div>
                           <div class="actual-value <%= subject_matter_match ? 'match' : 'mismatch' %>">
@@ -204,7 +215,7 @@
                       <td class="comparison-cell">
                         <div class="comparison-pair">
                           <div class="expected-value <%= inventive_concept_match ? 'match' : 'mismatch' %>">
-                            <%= expected_inventive_concept || 'N/A' %>
+                            <%= ground_truth[:inventive_concept] || 'N/A' %>
                           </div>
                           <div class="separator">|</div>
                           <div class="actual-value <%= inventive_concept_match ? 'match' : 'mismatch' %>">
