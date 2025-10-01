@@ -19,7 +19,7 @@ class EvaluationJob < ApplicationJob
     @prompt = @prompt_version.prompt
 
     # Create service instance
-    @service = AI::ValidityAnalysis::Service.new
+    @service = Ai::ValidityAnalysis::Service.new
 
     @eval_run.update!(status: :running, started_at: Time.current)
 
