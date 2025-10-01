@@ -34,7 +34,13 @@ module Validity101Demo
 
     # CRITICAL: Exclude PromptEngine gem migrations
     # The gem has migrations in wrong order, we use local copies instead
-    config.paths['db/migrate'].delete_if { |path| path.include?('prompt_engine') && path.include?('gems') }
+    config.after_initialize do
+      ActiveRecord::Base.connection_pool.with_connection do |connection|
+        connection.migration_context.migrations_paths.delete_if do |path|
+          path.include?('prompt_engine') && path.include?('gems')
+        end
+      end
+    end
 
     # Don't generate system test files.
     config.generators.system_tests = nil
