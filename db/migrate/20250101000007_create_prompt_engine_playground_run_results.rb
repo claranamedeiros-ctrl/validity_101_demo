@@ -1,4 +1,4 @@
-class CreatePromptEnginePlaygroundRunResults < ActiveRecord::Migration[7.0]
+class CreatePromptEnginePlaygroundRunResultsOverride < ActiveRecord::Migration[7.0]
   def change
     create_table :prompt_engine_playground_run_results do |t|
       t.references :prompt_version, null: false, foreign_key: { to_table: :prompt_engine_prompt_versions }

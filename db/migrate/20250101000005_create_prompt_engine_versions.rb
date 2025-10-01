@@ -1,4 +1,4 @@
-class CreatePromptEngineVersions < ActiveRecord::Migration[8.0]
+class CreatePromptEngineVersionsOverride < ActiveRecord::Migration[8.0]
   def change
     create_table :prompt_engine_prompt_versions do |t|
       t.references :prompt, null: false, foreign_key: { to_table: :prompt_engine_prompts }

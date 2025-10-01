@@ -1,4 +1,4 @@
-class CreatePromptEngineSettings < ActiveRecord::Migration[7.0]
+class CreatePromptEngineSettingsOverride < ActiveRecord::Migration[7.0]
   def change
     create_table :prompt_engine_settings do |t|
       # Encrypted API keys

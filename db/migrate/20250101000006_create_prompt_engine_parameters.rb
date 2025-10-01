@@ -1,4 +1,4 @@
-class CreatePromptEngineParameters < ActiveRecord::Migration[8.0]
+class CreatePromptEngineParametersOverride < ActiveRecord::Migration[8.0]
   def change
     create_table :prompt_engine_parameters do |t|
       t.references :prompt, null: false, foreign_key: { to_table: :prompt_engine_prompts }

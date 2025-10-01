@@ -1,4 +1,4 @@
-class CreateEvalTables < ActiveRecord::Migration[7.1]
+class CreateEvalTablesOverride < ActiveRecord::Migration[7.1]
   def change
     create_table :prompt_engine_eval_sets do |t|
       t.string :name, null: false

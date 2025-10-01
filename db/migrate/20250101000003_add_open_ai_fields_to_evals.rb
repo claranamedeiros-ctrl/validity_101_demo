@@ -1,4 +1,4 @@
-class AddOpenAiFieldsToEvals < ActiveRecord::Migration[7.1]
+class AddOpenAiFieldsToEvalsOverride < ActiveRecord::Migration[7.1]
   def change
     add_column :prompt_engine_eval_sets, :openai_eval_id, :string
     add_column :prompt_engine_eval_runs, :openai_run_id, :string

@@ -1313,3 +1313,88 @@ ActiveRecord::DuplicateMigrationNameError: Multiple migrations have the name Cre
 **Last Updated**: October 1, 2025
 **Status**: 🔄 Fixing migration duplicates - deployment in progress
 **Railway Project**: https://railway.com/project/74334dab-1659-498e-a674-51093d87392c
+
+---
+
+## 🚨 CONTINUED - Migration Hell (October 1, 2025 - Still Ongoing)
+
+### **Error 4: Discovered Root Cause - Gem Migration Order Bug**
+
+After removing all copied migrations (commit 106893d), got the SAME error again:
+```
+PG::UndefinedTable: ERROR: relation "prompt_engine_prompts" does not exist
+== 20250124000001 CreateEvalTables: migrating
+```
+
+**Critical Discovery:** The PromptEngine gem ITSELF has migrations in the WRONG order:
+```
+20250124000001_create_eval_tables.rb      (January 24 - runs FIRST ❌)
+20250723161909_create_prompts.rb          (July 23 - runs LATER ❌)
+```
+
+CreateEvalTables (January) runs BEFORE CreatePrompts (July) because Rails sorts by timestamp!
+
+**Why this is broken:**
+- CreateEvalTables has foreign key to `prompt_engine_prompts` table
+- But that table doesn't exist yet (CreatePrompts hasn't run)
+- Result: `PG::UndefinedTable` error every time
+
+**Attempted Fix (commit d9d3214):**
+- Copied ALL gem migrations to `db/migrate/` with corrected timestamps (20250101000001-8)
+- Put CreatePrompts FIRST (00001), CreateEvalTables SECOND (00002)
+- Expected: Rails would use our local migrations instead of gem migrations
+
+**Result:** ❌ FAILED AGAIN - Duplicate migrations error
+```
+ActiveRecord::DuplicateMigrationNameError: Multiple migrations have the name CreatePrompts
+```
+
+**Why it failed:**
+- Rails loads BOTH gem migrations AND local migrations
+- Even with different timestamps, the CLASS NAME is the same (CreatePrompts)
+- Rails detects duplicate class names and aborts
+
+### **Attempts Summary**
+
+| Attempt | Commit | Action | Error |
+|---------|--------|--------|-------|
+| 1 | 3aa2d00 | Copied gem migrations, swapped timestamps | Duplicate CreateEvalTables |
+| 2 | aed9456 | Removed eval migrations, kept prompts | Duplicate CreatePrompts |
+| 3 | 106893d | Removed ALL copied migrations | PG::UndefinedTable (gem order bug) |
+| 4 | d9d3214 | Copied all migrations with corrected order | Duplicate CreatePrompts (current) |
+
+### **The Core Problem**
+
+**Rails loads migrations from TWO sources:**
+1. Gem migrations: `/gems/prompt_engine-1.0.0/db/migrate/*.rb`
+2. Local migrations: `db/migrate/*.rb`
+
+**If you copy gem migrations to local:**
+- Rails sees BOTH versions
+- Even with different timestamps, CLASS NAMES are identical
+- Result: `DuplicateMigrationNameError`
+
+**If you DON'T copy gem migrations:**
+- Rails uses gem's broken migration order
+- CreateEvalTables runs before CreatePrompts
+- Result: `PG::UndefinedTable`
+
+**We're stuck in a catch-22:**
+- Can't use gem migrations (wrong order)
+- Can't copy gem migrations (duplicates)
+
+### **What Needs to Happen (Next Attempt)**
+
+Need to tell Rails to IGNORE gem migrations and ONLY use local ones.
+
+**Option 1:** Create initializer to exclude gem migration paths
+**Option 2:** Modify Gemfile to skip mounting gem migrations
+**Option 3:** Rename migration CLASS NAMES in local copies (not just timestamps)
+
+Attempting Option 3 next...
+
+---
+
+**Last Updated**: October 1, 2025 (10:45 AM)
+**Status**: ❌ Still broken - attempting fix #5
+**Railway Project**: https://railway.com/project/74334dab-1659-498e-a674-51093d87392c

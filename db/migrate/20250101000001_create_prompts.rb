@@ -1,4 +1,4 @@
-class CreatePrompts < ActiveRecord::Migration[8.0]
+class CreatePromptsOverride < ActiveRecord::Migration[8.0]
   def change
     create_table :prompt_engine_prompts do |t|
       t.string :name
