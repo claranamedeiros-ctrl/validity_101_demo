@@ -35,6 +35,7 @@ prompt = PromptEngine::Prompt.find_or_create_by!(name: "validity-101-agent") do 
   p.model = "gpt-4o"
   p.temperature = 0.1
   p.max_tokens = 1200
+  p.status = "active"  # CRITICAL: Must be 'active' for PromptEngine.render to find it
 end
 
 puts "✅ Created/Updated Prompt: #{prompt.name} (ID: #{prompt.id})"
