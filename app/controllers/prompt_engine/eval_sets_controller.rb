@@ -81,7 +81,7 @@ module PromptEngine
       begin
         # Run evaluation using our custom runner (async for progress tracking)
         EvaluationJob.perform_later(@eval_run.id, selected_patent_ids)
-        redirect_to prompt_eval_run_path(@prompt, @eval_run), notice: "Evaluation started! Refresh the page to see progress."
+        redirect_to prompt_eval_set_path(@prompt, @eval_set, mode: 'results'), notice: "Evaluation started! Results will appear below when complete."
       rescue => e
         @eval_run.update!(status: :failed, error_message: e.message)
         Rails.logger.error "Custom evaluation error: #{e.class} - #{e.message}"
