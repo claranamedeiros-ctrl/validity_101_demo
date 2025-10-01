@@ -32,6 +32,10 @@ module Validity101Demo
       config.assets.paths << engine_root.join('app', 'assets', 'images') if Dir.exist?(engine_root.join('app', 'assets', 'images'))
     end
 
+    # CRITICAL: Exclude PromptEngine gem migrations
+    # The gem has migrations in wrong order, we use local copies instead
+    config.paths['db/migrate'].delete_if { |path| path.include?('prompt_engine') && path.include?('gems') }
+
     # Don't generate system test files.
     config.generators.system_tests = nil
   end
