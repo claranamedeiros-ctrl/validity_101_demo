@@ -1204,3 +1204,112 @@ After Railway re-deploys with the fix:
 **Last Updated**: September 30, 2025
 **Status**: ✅ Seeds file fixed and deployed
 **Railway Project**: https://railway.com/project/74334dab-1659-498e-a674-51093d87392c
+
+---
+
+## 🚨 CRITICAL - Railway PostgreSQL Migration Issues (October 1, 2025)
+
+### **Issue**: Multiple deployment failures due to migration conflicts
+
+After adding PostgreSQL to Railway, encountered a series of migration errors that blocked deployment.
+
+### **Root Cause**: Duplicate Migrations
+
+**Problem:** Running `bundle exec rails prompt_engine:install:migrations` copied gem migrations to `db/migrate/`, creating duplicates.
+
+**Why this happened:**
+- PromptEngine gem ALREADY has migrations in `/gems/prompt_engine-1.0.0/db/migrate/`
+- Rails automatically loads gem migrations
+- Copying them to `db/migrate/` creates duplicates with different timestamps
+- Result: `ActiveRecord::DuplicateMigrationNameError`
+
+### **Errors Encountered (in order):**
+
+#### Error 1: Missing `prompt_engine_prompts` table
+```
+PG::UndefinedTable: ERROR: relation "prompt_engine_prompts" does not exist
+```
+**Cause:** `CreateEvalTables` migration ran before `CreatePrompts`
+**Attempted Fix:** Swapped migration timestamps (commit 3aa2d00)
+**Result:** Created MORE duplicates ❌
+
+#### Error 2: Duplicate CreateEvalTables
+```
+ActiveRecord::DuplicateMigrationNameError: Multiple migrations have the name CreateEvalTables
+```
+**Cause:** Copied migrations conflicted with gem migrations
+**Attempted Fix:** Removed eval-related copied migrations (commit aed9456)
+**Result:** Still had CreatePrompts duplicate ❌
+
+#### Error 3: Duplicate CreatePrompts
+```
+ActiveRecord::DuplicateMigrationNameError: Multiple migrations have the name CreatePrompts
+```
+**Cause:** Still had copied CreatePrompts migration in db/migrate/
+**Final Fix:** Removed ALL copied PromptEngine migrations (commit 106893d)
+**Result:** ✅ Should work now
+
+### **Final Solution (commit 106893d)**
+
+**Removed all copied PromptEngine gem migrations:**
+- ❌ `20251001034107_create_prompts.prompt_engine.rb` (duplicate)
+- ❌ `20251001034108_add_open_ai_fields_to_evals.prompt_engine.rb` (duplicate)
+- ❌ `20251001034109_add_grader_fields_to_eval_sets.prompt_engine.rb` (duplicate)
+- ❌ `20251001034110_create_eval_tables.prompt_engine.rb` (duplicate)
+- ❌ `20251001034111_create_prompt_engine_versions.prompt_engine.rb` (duplicate)
+- ❌ `20251001034112_create_prompt_engine_parameters.prompt_engine.rb` (duplicate)
+- ❌ `20251001034113_create_prompt_engine_playground_run_results.prompt_engine.rb` (duplicate)
+- ❌ `20251001034114_create_prompt_engine_settings.prompt_engine.rb` (duplicate)
+
+**Kept only our custom migration:**
+- ✅ `20250925141316_add_metadata_to_prompt_engine_eval_runs.rb` (not in gem)
+
+### **Key Lessons**
+
+1. **NEVER run `rails prompt_engine:install:migrations` for this project**
+   - The gem migrations are auto-loaded by Rails
+   - Copying creates duplicates with different timestamps
+   - Only copy if you need to MODIFY a gem migration
+
+2. **Check for gem migrations before copying**
+   ```bash
+   bundle show prompt_engine
+   ls /path/to/gem/db/migrate/
+   ```
+
+3. **Railway uses PostgreSQL, not SQLite**
+   - SQLite data doesn't persist on Railway (ephemeral filesystem)
+   - Must add PostgreSQL database service
+   - Set `DATABASE_URL` environment variable
+
+4. **Migration order matters in PostgreSQL**
+   - CreatePrompts MUST run before CreateEvalTables
+   - Gem handles this correctly with proper timestamps
+   - Don't mess with the order!
+
+### **Current Status**
+
+**Migrations in db/migrate/:**
+```
+20250925141316_add_metadata_to_prompt_engine_eval_runs.rb (our custom migration)
+```
+
+**Migrations auto-loaded from gem:**
+- All PromptEngine base migrations (CreatePrompts, CreateEvalTables, etc.)
+
+**Railway Deployment:**
+- Waiting for deployment with fixed migrations
+- Once deployed, run: `railway run bundle exec rails runner scripts/import_production_data.rb`
+
+### **Next Steps After Successful Deployment**
+
+1. ✅ Verify migrations succeeded in Railway logs
+2. ✅ Run import script to create Prompt ID 1 and Eval Set ID 2
+3. ✅ Verify app works at https://validity101demo-production.up.railway.app/prompt_engine
+4. ✅ Test "Run Alice Test" functionality
+
+---
+
+**Last Updated**: October 1, 2025
+**Status**: 🔄 Fixing migration duplicates - deployment in progress
+**Railway Project**: https://railway.com/project/74334dab-1659-498e-a674-51093d87392c
