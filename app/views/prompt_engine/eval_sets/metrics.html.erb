@@ -95,18 +95,22 @@
           </div>
 
           <%
-            # Load ground truth data
-            ground_truth_file = Rails.root.join('groundt', 'gt_aligned_normalized_test.csv')
+            # Load ground truth data from ORIGINAL Ground_truthg.csv
+            ground_truth_file = Rails.root.join('Ground_truthg.csv')
             ground_truth_data = {}
 
             if File.exist?(ground_truth_file)
               require 'csv'
               CSV.foreach(ground_truth_file, headers: true) do |row|
-                key = "#{row['patent_number']}_#{row['claim_number']}"
+                patent_number = row['Patent Number']
+                # All claims are claim 1 in our dataset
+                key = "#{patent_number}_1"
                 ground_truth_data[key] = {
-                  subject_matter: row['gt_subject_matter'],
-                  inventive_concept: row['gt_inventive_concept'],
-                  overall_eligibility: row['gt_overall_eligibility']
+                  subject_matter: row['Alice Step One'],
+                  inventive_concept: row['Alice Step Two'],
+                  overall_eligibility: row['Overall Eligibility'],
+                  claim_text: row['Claim Text'],
+                  abstract: row['Abstract']
                 }
               end
             end
@@ -143,24 +147,27 @@
                       ground_truth = ground_truth_data[key] || {}
 
                       # Map ground truth values to match LLM output format (based on backend rules)
-                      # Subject Matter: "abstract"/"not abstract" -> "abstract"/"patentable"
+                      # Ground_truthg.csv uses: "Abstract", "Not Abstract", "Natural Phenomenon"
+                      # Backend uses: "abstract", "patentable", "natural_phenomenon"
                       expected_subject_matter = case ground_truth[:subject_matter]
-                        when 'abstract' then 'abstract'
-                        when 'not abstract' then 'patentable'
-                        when 'natural phenomenon' then 'natural_phenomenon'
-                        else ground_truth[:subject_matter]
+                        when 'Abstract' then 'abstract'
+                        when 'Not Abstract' then 'patentable'
+                        when 'Natural Phenomenon' then 'natural_phenomenon'
+                        else ground_truth[:subject_matter]&.downcase
                       end
 
-                      # Inventive Concept: "ic found"/"no ic found" -> "inventive"/"uninventive"
+                      # Ground_truthg.csv uses: "IC Found", "No IC Found", "N/A"
+                      # Backend uses: "inventive", "uninventive", "skipped"
                       expected_inventive_concept = case ground_truth[:inventive_concept]
-                        when 'no ic found', 'nan' then 'uninventive'
-                        when 'ic found' then 'inventive'
-                        when 'skipped' then 'skipped'
-                        else ground_truth[:inventive_concept]
+                        when 'No IC Found' then 'uninventive'
+                        when 'IC Found' then 'inventive'
+                        when 'N/A', '-' then 'skipped'
+                        else ground_truth[:inventive_concept]&.downcase
                       end
 
-                      # Overall Eligibility: already matches ("eligible"/"ineligible")
-                      expected_overall = ground_truth[:overall_eligibility]
+                      # Ground_truthg.csv uses: "Eligible", "Ineligible"
+                      # Backend uses: "eligible", "ineligible"
+                      expected_overall = ground_truth[:overall_eligibility]&.downcase
 
                       # Parse actual LLM output from stored result
                       actual_llm_output = begin
