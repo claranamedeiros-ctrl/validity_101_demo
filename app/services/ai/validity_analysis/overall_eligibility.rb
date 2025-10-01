@@ -8,15 +8,15 @@ module Ai
         'LLM respond with incorrect data. Subject matter: %<subject_matter>s, inventive concept: %<inventive_concept>s'
 
       RULES = {
-        %w[patentable skipped]      => :eligible,
-        %w[patentable inventive]    => :eligible,
-        %w[patentable uninventive]  => :eligible,
-        %w[abstract skipped]        => :error,
-        %w[abstract inventive]      => :eligible,
-        %w[abstract uninventive]    => :ineligible,
-        %w[natural_phenomenon skipped]     => :error,
-        %w[natural_phenomenon inventive]   => :eligible,
-        %w[natural_phenomenon uninventive] => :ineligible
+        %i[patentable skipped]      => :eligible,
+        %i[patentable inventive]    => :eligible,
+        %i[patentable uninventive]  => :eligible,
+        %i[abstract skipped]        => :error,
+        %i[abstract inventive]      => :eligible,
+        %i[abstract uninventive]    => :ineligible,
+        %i[natural_phenomenon skipped]     => :error,
+        %i[natural_phenomenon inventive]   => :eligible,
+        %i[natural_phenomenon uninventive] => :ineligible
       }.freeze
 
       def initialize(subject_matter:, inventive_concept:)
