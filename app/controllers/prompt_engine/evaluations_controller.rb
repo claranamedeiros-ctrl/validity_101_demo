@@ -17,7 +17,7 @@ module PromptEngine
       @total_test_cases = TestCase.count
 
       # Recent activity
-      @recent_eval_runs = EvalRun.includes(:eval_set)
+      @recent_runs = EvalRun.includes(:eval_set)
         .order(created_at: :desc)
         .limit(10)
     end
