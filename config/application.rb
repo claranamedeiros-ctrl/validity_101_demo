@@ -1,3 +1,4 @@
+# Cache bust: 2025-10-01-11:00
 require_relative "boot"
 
 require "rails/all"
