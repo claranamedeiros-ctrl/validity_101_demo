@@ -1398,3 +1398,37 @@ Attempting Option 3 next...
 **Last Updated**: October 1, 2025 (10:45 AM)
 **Status**: ❌ Still broken - attempting fix #5
 **Railway Project**: https://railway.com/project/74334dab-1659-498e-a674-51093d87392c
+
+### **Attempts 5-9 Summary**
+
+| Attempt | Commit | Action | Error |
+|---------|--------|--------|-------|
+| 5 | d9d3214 | Copied migrations with corrected order | Duplicate CreatePrompts |
+| 6 | a26cc7f | Renamed migration classes (CreatePromptsOverride) | Duplicate CreatePrompts (still!) |
+| 7 | 2106274 | Added initializer to remove gem paths | Duplicate CreatePrompts (initializers run too late) |
+| 8 | f0f2af9 | Tried config.paths['db/migrate'].delete_if | NoMethodError (wrong API) |
+| 9 | a1ecca1 | Used config.after_initialize with connection_context | Railway cached old code |
+| 10 | 7cc5742 | Force cache bust with timestamp comment | Deploying now... |
+
+### **Current Attempt (10) - In Progress**
+
+**Strategy:** Force Railway to rebuild from scratch without cache
+- Added timestamp comment to bust Docker cache
+- Should deploy the corrected config.after_initialize code
+- Build time: ~15 minutes for fresh rebuild (no cache)
+
+**If this succeeds:**
+- ✅ Migrations will run in correct order (our local copies)
+- ✅ Gem migrations will be ignored
+- ✅ PostgreSQL tables will be created
+- ✅ We can run import script to populate data
+
+**If this fails:**
+- Last resort: Manually create PostgreSQL schema with raw SQL
+- Or: Fork prompt_engine gem, fix migration order, use our fork
+
+---
+
+**Last Updated**: October 1, 2025 (11:15 AM)
+**Status**: 🔄 Deploying attempt #10 - waiting for Railway build
+**Railway Project**: https://railway.com/project/74334dab-1659-498e-a674-51093d87392c
