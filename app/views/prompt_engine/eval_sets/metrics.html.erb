@@ -245,12 +245,38 @@
                       </td>
 
                       <td class="validity-score-cell">
-                        <% if actual_validity_score.present? %>
+                        <%
+                          # Calculate what the validity score SHOULD be based on ground truth
+                          # Per Jira: Eligible = 3-5 (high validity), Ineligible = 1-2 (low validity)
+                          # If overall eligibility matches, show LLM score, otherwise show expected range
+
+                          display_score = if overall_eligibility_match
+                            # LLM got it right, show its score
+                            actual_validity_score
+                          else
+                            # LLM got it wrong, show what score SHOULD be based on ground truth
+                            if expected_overall == 'eligible'
+                              # Should be high validity (3-5), pick middle value
+                              4
+                            elsif expected_overall == 'ineligible'
+                              # Should be low validity (1-2)
+                              1
+                            else
+                              actual_validity_score
+                            end
+                          end
+                        %>
+                        <% if display_score.present? %>
                           <div class="validity-score-display">
-                            <span class="score-value score-<%= actual_validity_score %>"><%= actual_validity_score %>/5</span>
+                            <span class="score-value score-<%= display_score %> <%= overall_eligibility_match ? '' : 'mismatch-score' %>">
+                              <%= display_score %>/5
+                            </span>
                             <div class="score-bar">
-                              <div class="score-fill" style="width: <%= (actual_validity_score.to_f / 5 * 100).round(1) %>%"></div>
+                              <div class="score-fill" style="width: <%= (display_score.to_f / 5 * 100).round(1) %>%"></div>
                             </div>
+                            <% unless overall_eligibility_match %>
+                              <small class="score-note">Expected for <%= expected_overall %></small>
+                            <% end %>
                           </div>
                         <% else %>
                           <span class="no-score">No Score</span>
@@ -688,5 +714,17 @@
   color: #6b7280;
   font-style: italic;
   font-size: 0.875rem;
+}
+
+.mismatch-score {
+  opacity: 0.6;
+  border: 2px dashed #ef4444 !important;
+}
+
+.score-note {
+  color: #6b7280;
+  font-size: 0.7rem;
+  font-style: italic;
+  margin-top: 0.25rem;
 }
 </style>
