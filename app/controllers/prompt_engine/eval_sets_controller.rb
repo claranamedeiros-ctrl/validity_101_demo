@@ -352,10 +352,10 @@ module PromptEngine
 
           # Parse actual output - now always stored as JSON with all 3 fields
           actual_data = begin
-            JSON.parse(result.output)
+            JSON.parse(result.actual_output)
           rescue JSON::ParserError
             # Fallback for legacy data that might still be strings
-            { overall_eligibility: result.output }
+            { overall_eligibility: result.actual_output }
           end
 
           ground_truth = ground_truth_data[key] || {}
