@@ -246,17 +246,29 @@
 
                       <td class="validity-score-cell">
                         <%
-                          # Validity score logic:
-                          # - If LLM got overall eligibility correct: show LLM's validity score
-                          # - If LLM got overall eligibility wrong: show 1/5 to indicate low validity of LLM's assessment
-                          # The score reflects confidence in the LLM's analysis, not what it should be
+                          # Validity score logic (per Jira AIPS-545):
+                          # Validity score = patent strength (1=low/weak, 5=high/strong)
+                          # - Eligible patents should have scores 3-5 (high validity strength)
+                          # - Ineligible patents should have scores 1-2 (low validity strength)
+                          #
+                          # If LLM got overall eligibility correct: show LLM's score
+                          # If LLM got overall eligibility wrong: show expected score based on GT eligibility
 
                           display_score = if overall_eligibility_match
-                            # LLM got it right, show its score
+                            # LLM got it right, show its score (already forced by backend)
                             actual_validity_score
                           else
-                            # LLM got overall eligibility wrong, so its analysis has low validity
-                            1
+                            # LLM got overall eligibility wrong
+                            # Show what the score SHOULD be based on ground truth patent strength
+                            if expected_overall == 'eligible'
+                              # Eligible patent = high validity strength, use 3 (minimum for eligible)
+                              3
+                            elsif expected_overall == 'ineligible'
+                              # Ineligible patent = low validity strength, use 2 (maximum for ineligible)
+                              2
+                            else
+                              actual_validity_score
+                            end
                           end
                         %>
                         <% if display_score.present? %>
@@ -268,7 +280,7 @@
                               <div class="score-fill" style="width: <%= (display_score.to_f / 5 * 100).round(1) %>%"></div>
                             </div>
                             <% unless overall_eligibility_match %>
-                              <small class="score-note">Wrong classification</small>
+                              <small class="score-note">Expected for <%= expected_overall %></small>
                             <% end %>
                           </div>
                         <% else %>
