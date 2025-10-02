@@ -262,7 +262,7 @@
                         <% if display_score.present? %>
                           <div class="validity-score-display">
                             <span class="score-value score-<%= display_score %> <%= overall_eligibility_match ? '' : 'mismatch-score' %>">
-                              <%= display_score %>/5
+                              <%= display_score %>
                             </span>
                             <div class="score-bar">
                               <div class="score-fill" style="width: <%= (display_score.to_f / 5 * 100).round(1) %>%"></div>
