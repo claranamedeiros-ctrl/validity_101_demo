@@ -53,7 +53,7 @@ module Ai
         chat = RubyLLM.chat(provider: "openai", model: rendered[:model] || "gpt-4o")
         response = chat.with_schema(schema)
                        .with_temperature(rendered[:temperature] || LLM_TEMPERATURE)
-                       .with_params(max_tokens: rendered[:max_tokens] || 1200)
+                       .with_params(max_completion_tokens: rendered[:max_tokens] || 1200)
                        .with_instructions(rendered[:system_message].to_s)
                        .ask(rendered[:content].to_s)
 
