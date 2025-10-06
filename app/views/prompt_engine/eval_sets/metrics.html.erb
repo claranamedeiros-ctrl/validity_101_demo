@@ -144,28 +144,13 @@
                       # Get ground truth data
                       ground_truth = ground_truth_data[key] || {}
 
-                      # Map ground truth values to match LLM output format (based on backend rules)
-                      # Ground_truthg.csv uses: "Abstract", "Not Abstract", "Natural Phenomenon"
-                      # Backend uses: "abstract", "patentable", "natural_phenomenon"
-                      expected_subject_matter = case ground_truth[:subject_matter]
-                        when 'Abstract' then 'abstract'
-                        when 'Not Abstract' then 'patentable'
-                        when 'Natural Phenomenon' then 'natural_phenomenon'
-                        else ground_truth[:subject_matter]&.downcase
-                      end
-
-                      # Ground_truthg.csv uses: "IC Found", "No IC Found", "N/A"
-                      # Backend uses: "inventive", "uninventive", "skipped"
-                      expected_inventive_concept = case ground_truth[:inventive_concept]
-                        when 'No IC Found' then 'uninventive'
-                        when 'IC Found' then 'inventive'
-                        when 'N/A', '-' then 'skipped'
-                        else ground_truth[:inventive_concept]&.downcase
-                      end
-
-                      # Ground_truthg.csv uses: "Eligible", "Ineligible"
-                      # Backend uses: "eligible", "ineligible"
-                      expected_overall = ground_truth[:overall_eligibility]&.downcase
+                      # NO MAPPING NEEDED! Ground truth now matches LLM schema exactly
+                      # Both use: "Abstract", "Not Abstract/Not Natural Phenomenon", "Natural Phenomenon"
+                      # Both use: "No", "Yes", "-"
+                      # Both use: "Eligible", "Ineligible"
+                      expected_subject_matter = ground_truth[:subject_matter]
+                      expected_inventive_concept = ground_truth[:inventive_concept]
+                      expected_overall = ground_truth[:overall_eligibility]
 
                       # Parse actual LLM output from stored result
                       actual_llm_output = begin
@@ -249,7 +234,8 @@
 
             <div class="data-note data-note--real">
               <p><strong>✅ Real Data:</strong> This page shows actual LLM outputs from your evaluation runs compared against ground truth data.</p>
-              <p><strong>Data Sources:</strong> LLM outputs from evaluation results database + Ground truth from <code>groundt/gt_aligned_normalized_test.csv</code></p>
+              <p><strong>Data Sources:</strong> LLM outputs from evaluation results database + Ground truth from <code>groundt/gt_transformed_for_llm.csv</code></p>
+              <p><strong>Direct Comparison:</strong> No value transformations - comparing raw LLM outputs to ground truth (both use same schema enums)</p>
             </div>
           <% else %>
             <div class="no-results-message">
