@@ -17,7 +17,7 @@ gem "bootsnap", require: false
 gem "sprockets-rails"
 gem "sassc-rails"
 
-gem "ruby_llm", "~> 1.5"
+gem "ruby_llm", "~> 1.6"
 gem "ruby-openai", "~> 7.4"
 gem "prompt_engine"
 gem "csv"
