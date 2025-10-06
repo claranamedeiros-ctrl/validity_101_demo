@@ -11,7 +11,9 @@ module Ai
       LLM_TEMPERATURE = 0.1
       ERROR_MESSAGE = 'Failed to analyze patent validity.'
 
-      def call(patent_number:, claim_number:, claim_text:, abstract:)
+      def call(patent_number:, claim_number:, claim_text:, abstract:, retry_count: 0)
+        max_retries = 2
+
         # 1) Render the prompt from PromptEngine (variables + runtime options)
         rendered = PromptEngine.render(
           "validity-101-agent",
@@ -31,7 +33,7 @@ module Ai
         if rendered[:model]&.start_with?('gpt-5')
           # GPT-5: Just rely on prompt instructions for JSON output
           Rails.logger.info "=" * 80
-          Rails.logger.info "GPT-5 REQUEST FOR #{patent_number}"
+          Rails.logger.info "GPT-5 REQUEST FOR #{patent_number} (attempt #{retry_count + 1})"
           Rails.logger.info "Model: #{rendered[:model]}"
           Rails.logger.info "Max tokens: #{rendered[:max_tokens] || 1200}"
           Rails.logger.info "System message length: #{rendered[:system_message].to_s.length} chars"
@@ -136,6 +138,20 @@ module Ai
           overall_eligibility: overall_eligibility
         }
       rescue => e
+        # Retry logic for intermittent API failures (empty response, timeouts, etc.)
+        if retry_count < max_retries && (e.message.include?("API returned string:") || e.is_a?(Timeout::Error))
+          wait_time = 2 ** retry_count  # Exponential backoff: 1s, 2s, 4s
+          Rails.logger.warn("Retrying #{patent_number} after #{wait_time}s (attempt #{retry_count + 2}/#{max_retries + 1})")
+          sleep(wait_time)
+          return call(
+            patent_number: patent_number,
+            claim_number: claim_number,
+            claim_text: claim_text,
+            abstract: abstract,
+            retry_count: retry_count + 1
+          )
+        end
+
         # Detailed error logging for debugging batch failures
         error_details = {
           timestamp: Time.current.iso8601,
@@ -146,7 +162,7 @@ module Ai
         }
 
         Rails.logger.error("=" * 80)
-        Rails.logger.error("VALIDITY ANALYSIS ERROR - #{patent_number}")
+        Rails.logger.error("VALIDITY ANALYSIS ERROR - #{patent_number} (after #{retry_count + 1} attempts)")
         Rails.logger.error("Error Class: #{e.class}")
         Rails.logger.error("Error Message: #{e.message}")
         Rails.logger.error("Full Backtrace:")
@@ -158,6 +174,7 @@ module Ai
           f.puts "\n#{'-' * 80}"
           f.puts "Timestamp: #{error_details[:timestamp]}"
           f.puts "Patent: #{patent_number}"
+          f.puts "Attempts: #{retry_count + 1}"
           f.puts "Error: #{e.class} - #{e.message}"
           f.puts "Backtrace:\n#{error_details[:backtrace].join("\n")}"
           f.puts '-' * 80
