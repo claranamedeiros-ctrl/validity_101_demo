@@ -86,14 +86,24 @@ module Ai
           response = chat_configured.ask(rendered[:content].to_s)
         end
 
-        # Handle case where response.content might be a String instead of Hash
-        raw = if response.content.is_a?(Hash)
-          response.content.with_indifferent_access
+        # Handle different response.content types
+        content_data = if response.content.is_a?(Hash)
+          response.content
         elsif response.content.is_a?(String)
-          # Try to parse JSON string
-          JSON.parse(response.content).with_indifferent_access rescue raise("API returned string: #{response.content}")
+          response.content
+        elsif response.content.respond_to?(:text)
+          # RubyLLM::Content object (GPT-5 returns this)
+          response.content.text
         else
           raise("Unexpected response type: #{response.content.class}")
+        end
+
+        # Parse JSON if it's a string
+        raw = if content_data.is_a?(Hash)
+          content_data.with_indifferent_access
+        else
+          # Try to parse JSON string
+          JSON.parse(content_data).with_indifferent_access rescue raise("API returned string: #{content_data}")
         end
 
         # 3) Calculate overall_eligibility from Alice Test logic
