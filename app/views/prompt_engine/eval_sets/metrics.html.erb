@@ -56,13 +56,13 @@
       </div>
     </div>
 
-    <!-- Detailed Ground Truth vs LLM Comparison -->
+    <!-- Run Selector for Detailed Analysis -->
     <div class="card">
       <div class="card-header">
-        <h2>Ground Truth vs LLM Output Analysis</h2>
+        <h2>Select Run to Analyze</h2>
         <div class="card-actions">
           <% if completed_runs.any? %>
-            <%= form_with url: "/prompt_engine/prompts/#{@prompt.id}/eval_sets/#{@eval_set.id}/metrics", method: :get, local: true,
+            <%= form_with url: "/prompt_engine/prompts/#{@prompt.id}/eval_sets/#{@eval_set.id}?mode=results", method: :get, local: true,
                 html: { style: "display: inline-flex; align-items: center; gap: 0.5rem;" } do |form| %>
               <%= form.select :run_id,
                   options_from_collection_for_select(completed_runs, :id,
@@ -86,169 +86,16 @@
 
         <% if current_run %>
           <div class="analysis-header">
-            <h3>Run #<%= current_run.id %> Analysis</h3>
+            <h3>Run #<%= current_run.id %> Summary</h3>
             <div class="run-summary">
               <span class="metric">Created: <%= current_run.created_at.strftime("%b %d, %Y at %I:%M %p") %></span>
               <span class="metric">Success Rate: <%= (current_run.passed_count.to_f / current_run.total_count.to_f * 100).round(1) %>%</span>
               <span class="metric">Patents Analyzed: <%= current_run.total_count %></span>
             </div>
+            <p style="margin-top: 1rem; color: #6b7280;">
+              Click "View Results" button above to see detailed Ground Truth vs LLM Output comparison for this run.
+            </p>
           </div>
-
-          <%
-            # Load ground truth data from ORIGINAL Ground_truthg.csv
-            ground_truth_file = Rails.root.join('Ground_truthg.csv')
-            ground_truth_data = {}
-
-            if File.exist?(ground_truth_file)
-              require 'csv'
-              CSV.foreach(ground_truth_file, headers: true) do |row|
-                patent_number = row['Patent Number']
-                # All claims are claim 1 in our dataset
-                key = "#{patent_number}_1"
-                ground_truth_data[key] = {
-                  subject_matter: row['Alice Step One'],
-                  inventive_concept: row['Alice Step Two'],
-                  overall_eligibility: row['Overall Eligibility'],
-                  claim_text: row['Claim Text'],
-                  abstract: row['Abstract']
-                }
-              end
-            end
-
-            # Get actual evaluation results from the database
-            eval_results = current_run.eval_results.includes(:test_case)
-          %>
-
-          <% if eval_results.any? %>
-            <div class="comparison-table-container">
-              <table class="comparison-table">
-                <thead>
-                  <tr>
-                    <th rowspan="2">Patent ID</th>
-                    <th colspan="3">Ground Truth vs LLM Output</th>
-                  </tr>
-                  <tr>
-                    <th>Subject Matter<br><small>Expected | Actual</small></th>
-                    <th>Inventive Concept<br><small>Expected | Actual</small></th>
-                    <th>Overall Eligibility<br><small>Expected | Actual</small></th>
-                  </tr>
-                </thead>                <tbody>
-                  <% eval_results.each do |result| %>
-                    <%
-                      # Parse test case input variables
-                      input_vars = JSON.parse(result.test_case.input_variables) rescue {}
-                      patent_id = input_vars['patent_id']
-                      claim_number = input_vars['claim_number']
-                      key = "#{patent_id}_#{claim_number}"
-
-                      # Get ground truth data
-                      ground_truth = ground_truth_data[key] || {}
-
-                      # NO MAPPING NEEDED! Ground truth now matches LLM schema exactly
-                      # Both use: "Abstract", "Not Abstract/Not Natural Phenomenon", "Natural Phenomenon"
-                      # Both use: "No", "Yes", "-"
-                      # Both use: "Eligible", "Ineligible"
-                      expected_subject_matter = ground_truth[:subject_matter]
-                      expected_inventive_concept = ground_truth[:inventive_concept]
-                      expected_overall = ground_truth[:overall_eligibility]
-
-                      # Parse actual LLM output from stored result
-                      actual_llm_output = begin
-                        JSON.parse(result.actual_output)
-                      rescue
-                        # If it's not JSON, try to extract from string
-                        if result.actual_output.include?('subject_matter')
-                          # Try to parse as JSON-like string
-                          begin
-                            eval(result.actual_output)
-                          rescue
-                            { 'overall_eligibility' => result.actual_output }
-                          end
-                        else
-                          { 'overall_eligibility' => result.actual_output }
-                        end
-                      end
-
-                      # Get actual values from LLM output (NO validity_score)
-                      actual_subject_matter = actual_llm_output['subject_matter'] || actual_llm_output[:subject_matter]
-                      actual_inventive_concept = actual_llm_output['inventive_concept'] || actual_llm_output[:inventive_concept]
-                      actual_overall = actual_llm_output['overall_eligibility'] || actual_llm_output[:overall_eligibility]
-
-                      # Determine if each field matches
-                      subject_matter_match = expected_subject_matter.to_s.downcase == actual_subject_matter.to_s.downcase
-                      inventive_concept_match = expected_inventive_concept.to_s.downcase == actual_inventive_concept.to_s.downcase
-                      overall_eligibility_match = expected_overall.to_s.downcase == actual_overall.to_s.downcase
-
-                      # Overall pass status comes from the stored result
-                      overall_pass = result.passed
-                    %>
-                    <tr class="comparison-row">
-                      <td class="patent-id-cell">
-                        <strong><%= patent_id %></strong>
-                      </td>
-
-                      <!-- Subject Matter -->
-                      <td class="comparison-cell">
-                        <div class="comparison-pair">
-                          <div class="expected-value <%= subject_matter_match ? 'match' : 'mismatch' %>">
-                            <%= ground_truth[:subject_matter] || 'N/A' %>
-                          </div>
-                          <div class="separator">|</div>
-                          <div class="actual-value <%= subject_matter_match ? 'match' : 'mismatch' %>">
-                            <%= actual_subject_matter || 'N/A' %>
-                          </div>
-                        </div>
-                      </td>
-
-                      <!-- Inventive Concept -->
-                      <td class="comparison-cell">
-                        <div class="comparison-pair">
-                          <div class="expected-value <%= inventive_concept_match ? 'match' : 'mismatch' %>">
-                            <%= ground_truth[:inventive_concept] || 'N/A' %>
-                          </div>
-                          <div class="separator">|</div>
-                          <div class="actual-value <%= inventive_concept_match ? 'match' : 'mismatch' %>">
-                            <%= actual_inventive_concept || 'N/A' %>
-                          </div>
-                        </div>
-                      </td>
-
-                      <!-- Overall Eligibility -->
-                      <td class="comparison-cell">
-                        <div class="comparison-pair">
-                          <div class="expected-value <%= overall_eligibility_match ? 'match' : 'mismatch' %>">
-                            <%= expected_overall || 'N/A' %>
-                          </div>
-                          <div class="separator">|</div>
-                          <div class="actual-value <%= overall_eligibility_match ? 'match' : 'mismatch' %>">
-                            <%= actual_overall || 'N/A' %>
-                          </div>
-                        </div>
-                      </td>
-                      <!-- Validity score column REMOVED per architecture redesign -->
-                    </tr>
-                  <% end %>
-                </tbody>
-              </table>
-            </div>
-
-            <div class="data-note data-note--real">
-              <p><strong>✅ Real Data:</strong> This page shows actual LLM outputs from your evaluation runs compared against ground truth data.</p>
-              <p><strong>Data Sources:</strong> LLM outputs from evaluation results database + Ground truth from <code>groundt/gt_transformed_for_llm.csv</code></p>
-              <p><strong>Direct Comparison:</strong> No value transformations - comparing raw LLM outputs to ground truth (both use same schema enums)</p>
-            </div>
-          <% else %>
-            <div class="no-results-message">
-              <h4>No Detailed Results Available</h4>
-              <p>This evaluation run doesn't have detailed LLM output data stored. This might be because:</p>
-              <ul>
-                <li>The evaluation was run before the detailed result storage was implemented</li>
-                <li>There was an issue storing the individual results during evaluation</li>
-              </ul>
-              <p><strong>Solution:</strong> Run a new evaluation to see detailed LLM vs Ground Truth comparison.</p>
-              <%= link_to "Run New Evaluation", "/prompt_engine/prompts/#{@prompt.id}/eval_sets/#{@eval_set.id}?mode=run_form", class: "btn btn--primary" %>
-            </div>
-          <% end %>
         <% else %>
           <div class="empty-state">
             <p>No completed evaluation runs available for analysis.</p>
