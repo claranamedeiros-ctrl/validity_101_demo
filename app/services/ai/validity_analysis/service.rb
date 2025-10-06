@@ -51,8 +51,16 @@ module Ai
         }
 
         chat = RubyLLM.chat(provider: "openai", model: rendered[:model] || "gpt-4o")
-        response = chat.with_schema(schema)
-                       .with_temperature(rendered[:temperature] || LLM_TEMPERATURE)
+
+        # Build chat with schema - GPT-5 doesn't support temperature parameter
+        chat_with_schema = chat.with_schema(schema)
+
+        # Only add temperature for non-GPT-5 models (GPT-5 doesn't support it)
+        unless rendered[:model]&.start_with?('gpt-5')
+          chat_with_schema = chat_with_schema.with_temperature(rendered[:temperature] || LLM_TEMPERATURE)
+        end
+
+        response = chat_with_schema
                        .with_params(max_completion_tokens: rendered[:max_tokens] || 1200)
                        .with_instructions(rendered[:system_message].to_s)
                        .ask(rendered[:content].to_s)
