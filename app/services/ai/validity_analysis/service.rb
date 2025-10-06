@@ -26,15 +26,12 @@ module Ai
         # 2) Execute with RubyLLM
         chat = RubyLLM.chat(provider: "openai", model: rendered[:model] || "gpt-4o")
 
-        # For GPT-5: use JSON mode without strict schema (GPT-5 doesn't support json_schema)
+        # For GPT-5: NO response_format parameter (GPT-5 doesn't support it yet)
         # For GPT-4: use strict schema validation
         if rendered[:model]&.start_with?('gpt-5')
-          # GPT-5: Use json_object mode (not json_schema)
+          # GPT-5: Just rely on prompt instructions for JSON output
           chat_configured = chat
-            .with_params(
-              max_completion_tokens: rendered[:max_tokens] || 1200,
-              response_format: { type: "json_object" }
-            )
+            .with_params(max_completion_tokens: rendered[:max_tokens] || 1200)
             .with_instructions(rendered[:system_message].to_s)
 
           response = chat_configured.ask(rendered[:content].to_s)
