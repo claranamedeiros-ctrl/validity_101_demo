@@ -89,10 +89,9 @@ module Ai
           overall_eligibility: overall_eligibility
         }
       rescue => e
-        Rails.logger.error("Validity 101 error: #{e.message}")
+        Rails.logger.error("Validity 101 error: #{e.class}: #{e.message}")
         Rails.logger.error(e.backtrace.first(5).join("\n"))
-        puts "DEBUG ERROR: #{e.class}: #{e.message}"  # Temporary debug output
-        { status: :error, status_message: ERROR_MESSAGE, error: e.message }
+        { status: :error, status_message: ERROR_MESSAGE, error: "#{e.class}: #{e.message}" }
       end
     end
   end
