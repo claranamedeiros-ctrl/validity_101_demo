@@ -57,7 +57,15 @@ module Ai
                        .with_instructions(rendered[:system_message].to_s)
                        .ask(rendered[:content].to_s)
 
-        raw = response.content.with_indifferent_access
+        # Handle case where response.content might be a String instead of Hash
+        raw = if response.content.is_a?(Hash)
+          response.content.with_indifferent_access
+        elsif response.content.is_a?(String)
+          # Try to parse JSON string
+          JSON.parse(response.content).with_indifferent_access rescue raise("API returned string: #{response.content}")
+        else
+          raise("Unexpected response type: #{response.content.class}")
+        end
 
         # 3) Calculate overall_eligibility from Alice Test logic
         # This is NOT a forced value - it's the actual test result
