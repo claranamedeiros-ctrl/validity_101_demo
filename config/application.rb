@@ -35,5 +35,12 @@ module Validity101Demo
 
     # Don't generate system test files.
     config.generators.system_tests = nil
+
+    # Active Record Encryption - MUST be here in application.rb, not production.rb
+    # PromptEngine gem needs this BEFORE environment configs load
+    # Force redeploy: 2025-10-06 13:45
+    config.active_record.encryption.primary_key = ENV['ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY'] || ('productionkey' * 4)
+    config.active_record.encryption.deterministic_key = ENV['ACTIVE_RECORD_ENCRYPTION_DETERMINISTIC_KEY'] || ('deterministic' * 4)
+    config.active_record.encryption.key_derivation_salt = ENV['ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT'] || ('saltproduction' * 4)
   end
 end
