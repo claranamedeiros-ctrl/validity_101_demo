@@ -39,6 +39,16 @@ class EvaluationJob < ApplicationJob
 
     total_count = test_cases.count
 
+    # Update eval_run with total_count immediately so UI can display it
+    @eval_run.update!(
+      total_count: total_count,
+      metadata: (@eval_run.metadata || {}).merge({
+        progress: 0,
+        processed: 0,
+        total: total_count
+      })
+    )
+
     Rails.logger.info "Starting custom evaluation for #{@eval_set.name} with #{total_count} test cases"
 
     test_cases.each_with_index do |test_case, index|
