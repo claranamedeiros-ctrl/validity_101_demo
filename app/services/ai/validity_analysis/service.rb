@@ -4,25 +4,10 @@ require_relative 'subject_matter'
 require_relative 'inventive_concept'
 require_relative 'overall_eligibility'
 require_relative 'validity_score'
+require_relative 'schema'
 
 module Ai
   module ValidityAnalysis
-    # RubyLLM Schema class for GPT-5 compatibility
-    class ResponseSchema < RubyLLM::Schema
-      string :patent_number, description: "The patent number as inputted by the user"
-      number :claim_number, description: "The claim number evaluated for the patent, as inputted by the user"
-      string :subject_matter,
-             description: "The output determined for Alice Step One",
-             enum: ["Abstract", "Natural Phenomenon", "Not Abstract/Not Natural Phenomenon"]
-      string :inventive_concept,
-             description: "The output determined for Alice Step Two",
-             enum: ["No", "Yes", "-"]
-      number :validity_score,
-             description: "The validity score from 1 to 5 determined for the patent claim",
-             minimum: 1,
-             maximum: 5
-    end
-
     class Service
       LLM_TEMPERATURE = 0.1
       ERROR_MESSAGE = 'Failed to analyze patent validity.'
@@ -43,7 +28,7 @@ module Ai
         chat = RubyLLM.chat(provider: "openai", model: rendered[:model] || "gpt-4o")
 
         # Build chat with schema - use RubyLLM::Schema class for GPT-5 compatibility
-        chat_with_schema = chat.with_schema(ResponseSchema)
+        chat_with_schema = chat.with_schema(Schema)
 
         # Only add temperature for non-GPT-5 models (GPT-5 doesn't support it)
         unless rendered[:model]&.start_with?('gpt-5')
