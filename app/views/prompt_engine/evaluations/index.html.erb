@@ -185,7 +185,7 @@
                   <% end %>
                 </td>
                 <td class="table__actions">
-                  <%= link_to "View", metrics_prompt_eval_set_path(run.eval_set.prompt, run.eval_set),
+                  <%= link_to "View", prompt_eval_set_path(run.eval_set.prompt, run.eval_set, mode: 'results', run_id: run.id),
                       class: "table__action" %>
                 </td>
               </tr>
