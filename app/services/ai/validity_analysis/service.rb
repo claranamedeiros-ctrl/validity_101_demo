@@ -90,7 +90,9 @@ module Ai
         }
       rescue => e
         Rails.logger.error("Validity 101 error: #{e.message}")
-        { status: :error, status_message: ERROR_MESSAGE }
+        Rails.logger.error(e.backtrace.first(5).join("\n"))
+        puts "DEBUG ERROR: #{e.class}: #{e.message}"  # Temporary debug output
+        { status: :error, status_message: ERROR_MESSAGE, error: e.message }
       end
     end
   end
