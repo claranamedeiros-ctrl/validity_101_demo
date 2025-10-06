@@ -56,19 +56,19 @@
       </div>
     </div>
 
-    <!-- Run Selector for Detailed Analysis -->
+    <!-- Selected Run Details -->
     <div class="card">
       <div class="card-header">
-        <h2>Select Run to Analyze</h2>
+        <h2>Run Details</h2>
         <div class="card-actions">
           <% if completed_runs.any? %>
-            <%= form_with url: "/prompt_engine/prompts/#{@prompt.id}/eval_sets/#{@eval_set.id}?mode=results", method: :get, local: true,
+            <%= form_with url: metrics_prompt_eval_set_path(@prompt, @eval_set), method: :get, local: true,
                 html: { style: "display: inline-flex; align-items: center; gap: 0.5rem;" } do |form| %>
               <%= form.select :run_id,
                   options_from_collection_for_select(completed_runs, :id,
                     lambda { |run| "Run ##{run.id} - #{run.created_at.strftime('%m/%d %H:%M')} (#{run.passed_count}/#{run.total_count})" },
                     params[:run_id]),
-                  { prompt: "Select Run to Analyze" },
+                  { prompt: "Select Run" },
                   { class: "form-select", onchange: "this.form.submit();" } %>
             <% end %>
           <% end %>
@@ -86,15 +86,16 @@
 
         <% if current_run %>
           <div class="analysis-header">
-            <h3>Run #<%= current_run.id %> Summary</h3>
+            <h3>Run #<%= current_run.id %></h3>
             <div class="run-summary">
               <span class="metric">Created: <%= current_run.created_at.strftime("%b %d, %Y at %I:%M %p") %></span>
               <span class="metric">Success Rate: <%= (current_run.passed_count.to_f / current_run.total_count.to_f * 100).round(1) %>%</span>
               <span class="metric">Patents Analyzed: <%= current_run.total_count %></span>
             </div>
-            <p style="margin-top: 1rem; color: #6b7280;">
-              Click "View Results" button above to see detailed Ground Truth vs LLM Output comparison for this run.
-            </p>
+            <div style="margin-top: 1rem;">
+              <%= link_to "View Detailed Results", prompt_eval_set_path(@prompt, @eval_set, mode: 'results', run_id: current_run.id),
+                  class: "btn btn--primary" %>
+            </div>
           </div>
         <% else %>
           <div class="empty-state">
