@@ -44,6 +44,9 @@ class EvaluationJob < ApplicationJob
     test_cases.each_with_index do |test_case, index|
       Rails.logger.info "Processing test case #{index + 1}/#{total_count}: #{test_case.description}"
 
+      # Add delay between API calls to prevent rate limiting and allow GPT-5 processing time
+      sleep(2) if index > 0
+
       begin
         # Parse input variables
         input_vars = JSON.parse(test_case.input_variables)
