@@ -7,6 +7,22 @@ require_relative 'validity_score'
 
 module Ai
   module ValidityAnalysis
+    # RubyLLM Schema class for GPT-5 compatibility
+    class ResponseSchema < RubyLLM::Schema
+      string :patent_number, description: "The patent number as inputted by the user"
+      number :claim_number, description: "The claim number evaluated for the patent, as inputted by the user"
+      string :subject_matter,
+             description: "The output determined for Alice Step One",
+             enum: ["Abstract", "Natural Phenomenon", "Not Abstract/Not Natural Phenomenon"]
+      string :inventive_concept,
+             description: "The output determined for Alice Step Two",
+             enum: ["No", "Yes", "-"]
+      number :validity_score,
+             description: "The validity score from 1 to 5 determined for the patent claim",
+             minimum: 1,
+             maximum: 5
+    end
+
     class Service
       LLM_TEMPERATURE = 0.1
       ERROR_MESSAGE = 'Failed to analyze patent validity.'
@@ -23,37 +39,11 @@ module Ai
           }
         )
 
-        # 2) Execute with RubyLLM and Backend Schema (MUST match backend/schema.rb exactly!)
-        schema = {
-          type: "object",
-          properties: {
-            patent_number: { type: "string", description: "The patent number as inputted by the user" },
-            claim_number: { type: "number", description: "The claim number evaluated for the patent, as inputted by the user" },
-            subject_matter: {
-              type: "string",
-              enum: ["Abstract", "Natural Phenomenon", "Not Abstract/Not Natural Phenomenon"],
-              description: "The output determined for Alice Step One"
-            },
-            inventive_concept: {
-              type: "string",
-              enum: ["No", "Yes", "-"],
-              description: "The output determined for Alice Step Two"
-            },
-            validity_score: {
-              type: "number",
-              minimum: 1,
-              maximum: 5,
-              description: "The validity score from 1 to 5 determined for the patent claim"
-            }
-          },
-          required: ["patent_number", "claim_number", "subject_matter", "inventive_concept", "validity_score"],
-          additionalProperties: false
-        }
-
+        # 2) Execute with RubyLLM Schema class (works with GPT-5)
         chat = RubyLLM.chat(provider: "openai", model: rendered[:model] || "gpt-4o")
 
-        # Build chat with schema - GPT-5 doesn't support temperature parameter
-        chat_with_schema = chat.with_schema(schema)
+        # Build chat with schema - use RubyLLM::Schema class for GPT-5 compatibility
+        chat_with_schema = chat.with_schema(ResponseSchema)
 
         # Only add temperature for non-GPT-5 models (GPT-5 doesn't support it)
         unless rendered[:model]&.start_with?('gpt-5')
