@@ -46,8 +46,8 @@
 .claude/
 .claude_session/
 
-# Ground truth data folder
-/groundt/
+# Ground truth data folder - TEMPORARILY ENABLED FOR DEPLOYMENT
+# /groundt/  ← COMMENTED OUT so CSV files deploy automatically
 
 # Ignore node_modules if using any JS dependencies
 /node_modules

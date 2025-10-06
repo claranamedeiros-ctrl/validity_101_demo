@@ -1,41 +1,35 @@
-# Deployment Instructions
+# Deployment Instructions - Ground Truth Redesign
 
-## Step 1: Create GitHub Repository
+## Overview
+This deployment implements a complete architecture redesign to eliminate backend rules and enable direct JSON comparison between ground truth and LLM outputs.
 
-1. **Go to GitHub**: https://github.com/claranamedeiros-ctrl
+## Railway Deployment Steps
 
-2. **Click the green "New" button** (should be near your profile/repositories)
+### Step 1: Wait for Automatic Deployment
+Railway is currently deploying the code changes automatically from GitHub push.
 
-3. **Fill out the form**:
-   - Repository name: `validity_101_demo`
-   - Description: `Patent validity evaluation system with AI analysis`
-   - Make it **Public**
-   - **DO NOT** check "Add a README file"
-   - **DO NOT** check "Add .gitignore"
-   - **DO NOT** check "Choose a license"
+Monitor at: https://railway.com/project/74334dab-1659-498e-a674-51093d87392c
 
-4. **Click "Create repository"**
+### Step 2: Upload Ground Truth CSV to Railway
 
-5. **Copy the repository URL** from the page that appears (should look like: `https://github.com/claranamedeiros-ctrl/validity_101_demo.git`)
+The transformed CSV file needs to be added to Railway:
 
-6. **Give me the URL** so I can push the code
+```bash
+# Copy the transformed CSV to Railway
+railway run bash -c "mkdir -p /app/groundt && cat > /app/groundt/gt_transformed_for_llm.csv" < groundt/gt_transformed_for_llm.csv
+```
 
-## Step 2: Railway Deployment (After GitHub Setup)
+### Step 3: Import Ground Truth Data
 
-1. Go to https://railway.app
-2. Sign up/login with your GitHub account
-3. Click "New Project"
-4. Select "Deploy from GitHub repo"
-5. Choose the `validity_101_demo` repository
-6. Add environment variable: `OPENAI_API_KEY` with your API key
-7. Deploy!
+```bash
+railway run rails runner scripts/import_new_ground_truth.rb
+```
 
-## What's Already Done
+### Step 4: Test the System
 
-✅ App prepared for Railway deployment
-✅ PostgreSQL configured for production
-✅ Railway.toml configuration file created
-✅ Git repository initialized and committed
-✅ .gitignore file created (excludes .env, .claude, groundt folder)
+Visit: https://validity101demo-production.up.railway.app/prompt_engine/prompts/1/eval_sets/2?mode=run_form
 
-## Next: Give me the GitHub repository URL so I can push the code!
+Login: admin / secret123
+
+Select 2-3 patents and run evaluation.
+
