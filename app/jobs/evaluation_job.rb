@@ -62,31 +62,39 @@ class EvaluationJob < ApplicationJob
           failed_count += 1
           create_eval_result(test_case, "ERROR: #{result[:status_message]}", test_case.expected_output, false)
         else
-          # Extract the actual result based on our schema for grading
-          actual_output_for_grading = extract_result_for_grading(result)
-          expected_output = test_case.expected_output
+          # Extract actual output (3 Alice Test fields only - NO validity_score)
+          actual_output_for_grading = {
+            subject_matter: result[:subject_matter] || result['subject_matter'],
+            inventive_concept: result[:inventive_concept] || result['inventive_concept'],
+            overall_eligibility: result[:overall_eligibility] || result['overall_eligibility']
+          }
 
-          # Grade the result based on the eval set's grader type
-          passed = grade_result(actual_output_for_grading, expected_output)
+          # Parse expected output (should be JSON with same 3 fields)
+          expected_output_parsed = begin
+            JSON.parse(test_case.expected_output, symbolize_names: true)
+          rescue JSON::ParserError
+            # Fallback for legacy string format
+            { overall_eligibility: test_case.expected_output }
+          end
+
+          # Grade by comparing structured JSON (all 3 fields must match)
+          passed = grade_result(actual_output_for_grading, expected_output_parsed)
 
           if passed
             passed_count += 1
             Rails.logger.info "✅ Test case #{index + 1} PASSED"
           else
             failed_count += 1
-            Rails.logger.info "❌ Test case #{index + 1} FAILED - Expected: #{expected_output}, Got: #{actual_output_for_grading}"
+            Rails.logger.info "❌ Test case #{index + 1} FAILED"
+            Rails.logger.info "   Expected: #{expected_output_parsed.inspect}"
+            Rails.logger.info "   Got: #{actual_output_for_grading.inspect}"
           end
 
-          # Store the complete result data as JSON for UI display
-          complete_result = {
-            subject_matter: result[:subject_matter] || result['subject_matter'],
-            inventive_concept: result[:inventive_concept] || result['inventive_concept'],
-            overall_eligibility: result[:overall_eligibility] || result['overall_eligibility'],
-            validity_score: result[:validity_score] || result['validity_score']
-          }.to_json
+          # Store the complete result data as JSON for UI display (NO validity_score)
+          complete_result = actual_output_for_grading.to_json
 
           # Create an EvalResult record for detailed tracking
-          create_eval_result(test_case, complete_result, expected_output, passed)
+          create_eval_result(test_case, complete_result, test_case.expected_output, passed)
         end
 
         processed_count += 1
@@ -138,47 +146,34 @@ class EvaluationJob < ApplicationJob
 
   private
 
-  def extract_result_for_grading(service_result)
-    case @eval_set.grader_type
-    when 'contains'
-      # Extract just the overall_eligibility value as a string
-      eligibility = service_result[:overall_eligibility] || service_result['overall_eligibility']
-      eligibility.to_s
-    when 'exact_match'
-      # Extract just the overall_eligibility value as a string for exact comparison
-      eligibility = service_result[:overall_eligibility] || service_result['overall_eligibility']
-      eligibility.to_s
-    else
-      # Default to overall_eligibility as string
-      eligibility = service_result[:overall_eligibility] || service_result['overall_eligibility']
-      eligibility.to_s
-    end
-  end
-
   def grade_result(actual_output, expected_output)
-    # Normalize both outputs for comparison
-    actual_normalized = actual_output.to_s.strip.downcase
-    expected_normalized = expected_output.to_s.strip.downcase
+    # Both actual_output and expected_output are now hashes with 3 fields
+    # Compare each field for exact match (case-insensitive)
 
-    result = case @eval_set.grader_type
-    when 'exact_match'
-      actual_normalized == expected_normalized
-    when 'contains'
-      actual_normalized.include?(expected_normalized)
-    when 'regex'
-      pattern = @eval_set.grader_config['pattern']
-      return false if pattern.blank?
-      Regexp.new(pattern, Regexp::IGNORECASE).match?(actual_output.to_s)
-    when 'json_schema'
-      actual_normalized == expected_normalized
-    else
-      actual_normalized == expected_normalized
-    end
+    actual_subject_matter = actual_output[:subject_matter].to_s.strip.downcase
+    expected_subject_matter = expected_output[:subject_matter].to_s.strip.downcase
 
-    # Log comparison for debugging
-    Rails.logger.info "Grading comparison (#{@eval_set.grader_type}): '#{actual_output}' vs '#{expected_output}' = #{result}"
+    actual_inventive_concept = actual_output[:inventive_concept].to_s.strip.downcase
+    expected_inventive_concept = expected_output[:inventive_concept].to_s.strip.downcase
 
-    result
+    actual_eligibility = actual_output[:overall_eligibility].to_s.strip.downcase
+    expected_eligibility = expected_output[:overall_eligibility].to_s.strip.downcase
+
+    # All three fields must match for the test to pass
+    subject_matter_match = actual_subject_matter == expected_subject_matter
+    inventive_concept_match = actual_inventive_concept == expected_inventive_concept
+    eligibility_match = actual_eligibility == expected_eligibility
+
+    passed = subject_matter_match && inventive_concept_match && eligibility_match
+
+    # Log detailed comparison
+    Rails.logger.info "Field-by-field comparison:"
+    Rails.logger.info "  subject_matter: #{actual_subject_matter} == #{expected_subject_matter} ? #{subject_matter_match}"
+    Rails.logger.info "  inventive_concept: #{actual_inventive_concept} == #{expected_inventive_concept} ? #{inventive_concept_match}"
+    Rails.logger.info "  overall_eligibility: #{actual_eligibility} == #{expected_eligibility} ? #{eligibility_match}"
+    Rails.logger.info "  RESULT: #{passed ? 'PASS' : 'FAIL'}"
+
+    passed
   end
 
   def create_eval_result(test_case, actual_output, expected_output, passed)

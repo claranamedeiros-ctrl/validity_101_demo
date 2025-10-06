@@ -1432,3 +1432,238 @@ Attempting Option 3 next...
 **Last Updated**: October 1, 2025 (11:15 AM)
 **Status**: 🔄 Deploying attempt #10 - waiting for Railway build
 **Railway Project**: https://railway.com/project/74334dab-1659-498e-a674-51093d87392c
+
+---
+
+## 🚀 MAJOR ARCHITECTURE CHANGE - Evaluation System Redesign (October 6, 2025)
+
+### **Issue**: Complete Re-evaluation of Ground Truth Comparison Strategy
+
+**User Request:** "We are completely changing the approach of how we are testing the prompt against the ground truth. We should make both ground truth and prompt output match. We will forget about the rules. So the third evaluation column with the 'scoring system' disappears."
+
+**Context:** The current system has backend "rules" that force/normalize LLM outputs before comparing to ground truth. This creates a disconnect between what the LLM actually returns and what we evaluate.
+
+### **Current System Architecture**
+
+#### **Backend Rules Implementation (app/services/ai/validity_analysis/service.rb)**
+
+The system currently applies complex transformations to LLM outputs:
+
+```ruby
+# Step 3: Map LLM output through backend mapping classes
+subject_matter_obj = Ai::ValidityAnalysis::SubjectMatter.new(
+  llm_subject_matter: raw[:subject_matter]
+)
+
+inventive_concept_obj = Ai::ValidityAnalysis::InventiveConcept.new(
+  llm_inventive_concept: raw[:inventive_concept],
+  subject_matter: subject_matter_obj.value
+)
+
+# Step 4: Determine overall eligibility with business logic
+overall_eligibility_obj = Ai::ValidityAnalysis::OverallEligibility.new(
+  subject_matter: subject_matter_obj.value,
+  inventive_concept: inventive_concept_obj.value
+)
+
+# Step 5: Normalize validity score with consistency checks
+validity_score_obj = Ai::ValidityAnalysis::ValidityScore.new(
+  validity_score: raw[:validity_score],
+  overall_eligibility: overall_eligibility_obj.value
+)
+
+# Step 6: Return with FORCED values
+{
+  # ...
+  inventive_concept: inventive_concept_obj.forced_value, # Forces :skipped if patentable!
+  validity_score: validity_score_obj.forced_value, # Forces 3 or 2 if inconsistent!
+  overall_eligibility: overall_eligibility_obj.value
+}
+```
+
+**Problems with this approach:**
+1. **Hidden transformations**: LLM outputs are modified before comparison
+2. **Unclear evaluation**: We're not testing what the LLM actually said
+3. **Complex debugging**: Forced values make it hard to understand LLM behavior
+4. **Inconsistent scoring**: Validity score column was added/removed multiple times
+5. **Ground truth mismatch**: Different vocabularies between LLM and ground truth
+
+#### **LLM Schema vs Ground Truth Format Mismatch**
+
+**LLM Schema (backend/schema.rb lines 8-12):**
+```ruby
+string :subject_matter, enum: ['Abstract', 'Natural Phenomenon', 'Not Abstract/Not Natural Phenomenon']
+string :inventive_concept, enum: ['No', 'Yes', '-']
+number :validity_score, minimum: 1, maximum: 5
+```
+
+**BUT System Prompt (backend/system.erb lines 18-36) says:**
+- Alice Step One output: "Abstract", "Natural Phenomenon", "Not Abstract"
+- Alice Step Two output: "No IC Found", "IC Found", "N/A"
+- Overall eligibility: "Eligible", "Ineligible"
+
+**Ground Truth CSV Format:**
+```csv
+patent_number,claim_number,gt_subject_matter,gt_inventive_concept,gt_overall_eligibility
+US6128415A,1,abstract,no ic found,ineligible
+```
+
+**Three different vocabularies for the same concept!**
+
+### **New Architecture Design - Option 1 (SELECTED)**
+
+**Decision:** Normalize ground truth to match LLM schema exactly, eliminate backend rules.
+
+#### **Key Changes**
+
+1. **Eliminate Backend Rules**
+   - Remove `SubjectMatter.forced_value`
+   - Remove `InventiveConcept.forced_value`
+   - Remove `ValidityScore.forced_value`
+   - Remove `OverallEligibility` business logic
+   - Return RAW LLM outputs directly
+
+2. **Update Ground Truth CSV Format**
+   ```csv
+   patent_number,claim_number,gt_subject_matter,gt_inventive_concept,gt_overall_eligibility
+   US6128415A,1,Abstract,No,Ineligible
+   US7644019B2,1,Abstract,No,Ineligible
+   ```
+
+   **Transformation rules:**
+   - `"abstract"` → `"Abstract"`
+   - `"natural phenomenon"` → `"Natural Phenomenon"`
+   - `"not abstract"` → `"Not Abstract/Not Natural Phenomenon"`
+   - `"no ic found"` → `"No"`
+   - `"ic found"` → `"Yes"`
+   - `"n/a"` / `"skipped"` → `"-"`
+   - `"ineligible"` → `"Ineligible"`
+   - `"eligible"` → `"Eligible"`
+
+3. **Change Evaluation Logic**
+   - Compare full structured JSON outputs
+   - No more "overall_eligibility" string comparison
+   - New comparison format:
+   ```json
+   {
+     "subject_matter": "Abstract",
+     "inventive_concept": "No",
+     "overall_eligibility": "Ineligible"
+   }
+   ```
+
+4. **Remove Validity Score from Evaluation**
+   - **User requirement:** "the third evaluation column with the 'scoring system' disappears"
+   - Remove validity_score from comparison logic
+   - Keep in LLM output for reference, but don't evaluate it
+   - Focus evaluation on Alice Test outputs only
+
+#### **Benefits of This Approach**
+
+✅ **Transparency**: Direct comparison between LLM output and ground truth
+✅ **Simplicity**: No hidden transformations or forced values
+✅ **Debuggability**: See exactly what LLM returned vs what was expected
+✅ **System prompt unchanged**: Works with existing prompt without modifications
+✅ **Structured comparison**: JSON-to-JSON matching instead of substring matching
+
+#### **Structured Output Requirement**
+
+**User note:** "I need you to make sure we use some sort of structured output that should be somewhere in the prompt."
+
+**Current implementation:** The system ALREADY uses structured output via RubyLLM schema:
+```ruby
+# app/services/ai/validity_analysis/service.rb line 26-50
+schema = {
+  type: "object",
+  properties: {
+    patent_number: { type: "string" },
+    claim_number: { type: "number" },
+    subject_matter: {
+      type: "string",
+      enum: ["Abstract", "Natural Phenomenon", "Not Abstract/Not Natural Phenomenon"]
+    },
+    inventive_concept: {
+      type: "string",
+      enum: ["No", "Yes", "-"]
+    },
+    validity_score: { type: "number", minimum: 1, maximum: 5 }
+  },
+  required: ["patent_number", "claim_number", "subject_matter", "inventive_concept", "validity_score"]
+}
+```
+
+This structured output is enforced via `chat.with_schema(schema)` which ensures LLM returns valid JSON.
+
+### **System Prompt Analysis**
+
+**Critical constraint:** "WITHOUT CHANGING THE SYSTEM PROMPT"
+
+**Current system prompt** (backend/system.erb) specifies:
+- Line 18: "The output for Alice Step One is 'Not Abstract' or 'Not Natural Phenomenon'"
+- Line 20: "The output for Alice Step One is one of the following: 'Abstract', 'Natural Phenomenon'"
+- Line 34: "The output for Alice Step Two is 'No IC Found'"
+- Line 36: "The output for Alice Step Two is 'IC Found'"
+
+**Problem identified:** Prompt says "No IC Found" / "IC Found" but schema only allows "No" / "Yes" / "-"
+
+**Solution:** The schema FORCES the LLM to use "No"/"Yes"/"-" regardless of what the prompt says. This means:
+1. Ground truth must use "No"/"Yes"/"-" to match schema-enforced output
+2. System prompt text doesn't matter because schema wins
+3. We can normalize ground truth without changing prompt
+
+### **Implementation Plan**
+
+#### **Phase 1: Ground Truth Transformation**
+1. Update `/scripts/convert_ground_truth.rb` with new mappings
+2. Transform CSV to match LLM schema exactly
+3. Update column format if needed
+4. Backup old CSV before replacement
+
+#### **Phase 2: Remove Backend Rules**
+1. Simplify `/app/services/ai/validity_analysis/service.rb`
+2. Remove forced_value calls
+3. Return raw LLM outputs directly
+4. Keep schema validation (structured output requirement)
+
+#### **Phase 3: Update Evaluation Logic**
+1. Change comparison from string matching to JSON matching
+2. Compare structured objects: `{subject_matter, inventive_concept, overall_eligibility}`
+3. Remove validity_score from comparison (per user requirement)
+4. Update `EvaluationJob` grading logic
+
+#### **Phase 4: Update UI Display**
+1. Remove validity_score column from metrics view (per user requirement)
+2. Keep subject_matter, inventive_concept, overall_eligibility columns
+3. Update comparison display to show structured JSON
+
+### **Files to Modify**
+
+1. ✅ `/PROGRESS.md` - This documentation
+2. 🔄 `/scripts/convert_ground_truth.rb` - Update transformation mappings
+3. 🔄 `/groundt/gt_aligned_normalized_test.csv` - Transform data
+4. 🔄 `/app/services/ai/validity_analysis/service.rb` - Remove backend rules
+5. 🔄 `/app/jobs/evaluation_job.rb` - Update grading logic
+6. 🔄 `/app/views/prompt_engine/eval_sets/metrics.html.erb` - Remove validity_score column
+
+### **Critical Decisions Documented**
+
+**Q: Should we use exact_match or JSON comparison?**
+**A:** JSON comparison of structured objects (subject_matter, inventive_concept, overall_eligibility)
+
+**Q: Do we keep validity_score in LLM output?**
+**A:** Yes, but don't evaluate it (per user: "scoring system disappears" from evaluation)
+
+**Q: How do we handle the prompt vs schema mismatch?**
+**A:** Schema wins - LLM must return values matching schema enums regardless of prompt text
+
+**Q: What happens to the backend mapping classes?**
+**A:** Keep classes for potential future use, but stop using forced_value methods
+
+**Q: Do we need to update the system prompt?**
+**A:** No - user specified "WITHOUT CHANGING THE SYSTEM PROMPT"
+
+---
+
+**Last Updated**: October 6, 2025
+**Status**: 🔄 Architecture redesign in progress - Option 1 selected
+**Next Steps**: Begin Phase 1 - Ground truth transformation

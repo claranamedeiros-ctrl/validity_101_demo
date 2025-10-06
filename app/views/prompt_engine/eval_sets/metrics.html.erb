@@ -126,15 +126,13 @@
                   <tr>
                     <th rowspan="2">Patent ID</th>
                     <th colspan="3">Ground Truth vs LLM Output</th>
-                    <th rowspan="2">Validity Score</th>
                   </tr>
                   <tr>
                     <th>Subject Matter<br><small>Expected | Actual</small></th>
                     <th>Inventive Concept<br><small>Expected | Actual</small></th>
                     <th>Overall Eligibility<br><small>Expected | Actual</small></th>
                   </tr>
-                </thead>
-                <tbody>
+                </thead>                <tbody>
                   <% eval_results.each do |result| %>
                     <%
                       # Parse test case input variables
@@ -186,11 +184,10 @@
                         end
                       end
 
-                      # Get actual values from LLM output
+                      # Get actual values from LLM output (NO validity_score)
                       actual_subject_matter = actual_llm_output['subject_matter'] || actual_llm_output[:subject_matter]
                       actual_inventive_concept = actual_llm_output['inventive_concept'] || actual_llm_output[:inventive_concept]
                       actual_overall = actual_llm_output['overall_eligibility'] || actual_llm_output[:overall_eligibility]
-                      actual_validity_score = actual_llm_output['validity_score'] || actual_llm_output[:validity_score]
 
                       # Determine if each field matches
                       subject_matter_match = expected_subject_matter.to_s.downcase == actual_subject_matter.to_s.downcase
@@ -243,50 +240,7 @@
                           </div>
                         </div>
                       </td>
-
-                      <td class="validity-score-cell">
-                        <%
-                          # Validity score logic (per Jira AIPS-545):
-                          # Validity score = patent strength (1=low/weak, 5=high/strong)
-                          # - Eligible patents should have scores 3-5 (high validity strength)
-                          # - Ineligible patents should have scores 1-2 (low validity strength)
-                          #
-                          # If LLM got overall eligibility correct: show LLM's score
-                          # If LLM got overall eligibility wrong: show expected score based on GT eligibility
-
-                          display_score = if overall_eligibility_match
-                            # LLM got it right, show its score (already forced by backend)
-                            actual_validity_score
-                          else
-                            # LLM got overall eligibility wrong
-                            # Show what the score SHOULD be based on ground truth patent strength
-                            if expected_overall == 'eligible'
-                              # Eligible patent = high validity strength, use 3 (minimum for eligible)
-                              3
-                            elsif expected_overall == 'ineligible'
-                              # Ineligible patent = low validity strength, use 2 (maximum for ineligible)
-                              2
-                            else
-                              actual_validity_score
-                            end
-                          end
-                        %>
-                        <% if display_score.present? %>
-                          <div class="validity-score-display">
-                            <span class="score-value score-<%= display_score %> <%= overall_eligibility_match ? '' : 'mismatch-score' %>">
-                              <%= display_score %>
-                            </span>
-                            <div class="score-bar">
-                              <div class="score-fill" style="width: <%= (display_score.to_f / 5 * 100).round(1) %>%"></div>
-                            </div>
-                            <% unless overall_eligibility_match %>
-                              <small class="score-note">Expected for <%= expected_overall %></small>
-                            <% end %>
-                          </div>
-                        <% else %>
-                          <span class="no-score">No Score</span>
-                        <% end %>
-                      </td>
+                      <!-- Validity score column REMOVED per architecture redesign -->
                     </tr>
                   <% end %>
                 </tbody>

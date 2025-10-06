@@ -59,52 +59,34 @@ module Ai
 
         raw = response.content.with_indifferent_access
 
-        # 3) Map LLM output through backend mapping classes (backend/service.rb:69-79)
-        subject_matter_obj = Ai::ValidityAnalysis::SubjectMatter.new(
-          llm_subject_matter: raw[:subject_matter]
-        )
+        # 3) Calculate overall_eligibility from Alice Test logic
+        # This is NOT a forced value - it's the actual test result
+        subject_matter = raw[:subject_matter]
+        inventive_concept = raw[:inventive_concept]
 
-        inventive_concept_obj = Ai::ValidityAnalysis::InventiveConcept.new(
-          llm_inventive_concept: raw[:inventive_concept],
-          subject_matter: subject_matter_obj.value
-        )
-
-        # 4) Determine overall eligibility (backend/service.rb:88-93)
-        overall_eligibility_obj = Ai::ValidityAnalysis::OverallEligibility.new(
-          subject_matter: subject_matter_obj.value,
-          inventive_concept: inventive_concept_obj.value
-        )
-
-        if overall_eligibility_obj.invalid?
-          return {
-            status: :error,
-            status_message: overall_eligibility_obj.error_message || ERROR_MESSAGE
-          }
+        # Alice Test: Eligible if NOT directed to abstract/natural phenomenon,
+        # OR if it has an inventive concept
+        overall_eligibility = if subject_matter == "Not Abstract/Not Natural Phenomenon"
+          "Eligible"
+        elsif inventive_concept == "Yes"
+          "Eligible"
+        else
+          "Ineligible"
         end
 
-        # 5) Normalize validity score (backend/service.rb:82-86)
-        validity_score_obj = Ai::ValidityAnalysis::ValidityScore.new(
-          validity_score: raw[:validity_score],
-          overall_eligibility: overall_eligibility_obj.value
-        )
-
-        # We log but don't fail on invalid scores (backend/service.rb:24-27)
-        if validity_score_obj.invalid?
-          Rails.logger.error { validity_score_obj.error_message }
-        end
-
-        # 6) Return with forced values (backend/service.rb:95-104)
+        # 4) Return RAW LLM outputs directly (no forced values!)
         {
           status: :success,
           status_message: nil,
           # Echo inputs
           patent_number: raw[:patent_number] || patent_number,
           claim_number: raw[:claim_number] || claim_number.to_i,
-          # Mapped values using backend logic with forced_value methods
-          subject_matter: subject_matter_obj.value,
-          inventive_concept: inventive_concept_obj.forced_value, # Forces :skipped if patentable!
-          validity_score: validity_score_obj.forced_value, # Forces 3 or 2 if inconsistent!
-          overall_eligibility: overall_eligibility_obj.value
+          # RAW LLM outputs - exactly what the LLM said
+          subject_matter: subject_matter,
+          inventive_concept: inventive_concept,
+          validity_score: raw[:validity_score],
+          # Calculated overall eligibility based on Alice Test logic
+          overall_eligibility: overall_eligibility
         }
       rescue => e
         Rails.logger.error("Validity 101 error: #{e.message}")

@@ -306,31 +306,22 @@ module PromptEngine
     end
 
     def load_ground_truth_data
-      # Load ground truth data from CSV file
-      ground_truth_file = Rails.root.join('groundt', 'gt_aligned_normalized_test.csv')
+      # Load ground truth data from NEW transformed CSV file
+      ground_truth_file = Rails.root.join('groundt', 'gt_transformed_for_llm.csv')
       return {} unless File.exist?(ground_truth_file)
 
       ground_truth = {}
-      CSV.foreach(ground_truth_file, headers: true) do |row|
+      CSV.foreach(ground_truth_file, headers: true, encoding: 'UTF-8') do |row|
         key = "#{row['patent_number']}_#{row['claim_number']}"
 
-        # Map ground truth values to match LLM schema enums
-        mapped_inventive_concept = case row['gt_inventive_concept']&.downcase
-        when 'no ic found', 'none', 'no inventive concept'
-          'uninventive'
-        when 'inventive concept found', 'yes', 'inventive'
-          'inventive'
-        when 'skipped', 'skip'
-          'skipped'
-        else
-          row['gt_inventive_concept'] # Keep original if it already matches
-        end
-
+        # NO mapping needed - values already match LLM schema exactly!
         ground_truth[key] = {
           patent_number: row['patent_number'],
           claim_number: row['claim_number'].to_i,
+          claim_text: row['claim_text'],
+          abstract: row['abstract'],
           subject_matter: row['gt_subject_matter'],
-          inventive_concept: mapped_inventive_concept,
+          inventive_concept: row['gt_inventive_concept'],
           overall_eligibility: row['gt_overall_eligibility']
         }
       end
