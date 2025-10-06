@@ -89,8 +89,33 @@ module Ai
           overall_eligibility: overall_eligibility
         }
       rescue => e
-        Rails.logger.error("Validity 101 error: #{e.class}: #{e.message}")
-        Rails.logger.error(e.backtrace.first(5).join("\n"))
+        # Detailed error logging for debugging batch failures
+        error_details = {
+          timestamp: Time.current.iso8601,
+          patent_number: patent_number,
+          error_class: e.class.name,
+          error_message: e.message,
+          backtrace: e.backtrace.first(10)
+        }
+
+        Rails.logger.error("=" * 80)
+        Rails.logger.error("VALIDITY ANALYSIS ERROR - #{patent_number}")
+        Rails.logger.error("Error Class: #{e.class}")
+        Rails.logger.error("Error Message: #{e.message}")
+        Rails.logger.error("Full Backtrace:")
+        Rails.logger.error(e.backtrace.join("\n"))
+        Rails.logger.error("=" * 80)
+
+        # Also log to a dedicated error file for easy debugging
+        File.open(Rails.root.join('log', 'patent_evaluation_errors.log'), 'a') do |f|
+          f.puts "\n#{'-' * 80}"
+          f.puts "Timestamp: #{error_details[:timestamp]}"
+          f.puts "Patent: #{patent_number}"
+          f.puts "Error: #{e.class} - #{e.message}"
+          f.puts "Backtrace:\n#{error_details[:backtrace].join("\n")}"
+          f.puts '-' * 80
+        end
+
         { status: :error, status_message: ERROR_MESSAGE, error: "#{e.class}: #{e.message}" }
       end
     end
