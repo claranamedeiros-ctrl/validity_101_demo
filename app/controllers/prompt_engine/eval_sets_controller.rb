@@ -113,7 +113,9 @@ module PromptEngine
 
     def render_results
       # Show detailed results with ground truth comparison
-      @eval_runs = @eval_set.eval_runs.where(status: "completed").order(created_at: :desc).limit(10)
+      # Include both completed and running evaluations
+      @eval_runs = @eval_set.eval_runs.where(status: ["completed", "running"]).order(created_at: :desc).limit(10)
+      @running_runs = @eval_runs.select { |r| r.status == "running" }
       @selected_run = nil
       @eval_results = []
       @detailed_comparison = []
