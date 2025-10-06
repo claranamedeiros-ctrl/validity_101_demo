@@ -4,7 +4,6 @@ require_relative 'subject_matter'
 require_relative 'inventive_concept'
 require_relative 'overall_eligibility'
 require_relative 'validity_score'
-require_relative 'schema'
 
 module Ai
   module ValidityAnalysis
@@ -24,21 +23,57 @@ module Ai
           }
         )
 
-        # 2) Execute with RubyLLM Schema class (works with GPT-5)
+        # 2) Execute with RubyLLM
         chat = RubyLLM.chat(provider: "openai", model: rendered[:model] || "gpt-4o")
 
-        # Build chat with schema - use RubyLLM::Schema class for GPT-5 compatibility
-        chat_with_schema = chat.with_schema(Schema)
+        # For GPT-5: use JSON mode without strict schema (GPT-5 doesn't support json_schema)
+        # For GPT-4: use strict schema validation
+        if rendered[:model]&.start_with?('gpt-5')
+          # GPT-5: Use json_object mode (not json_schema)
+          chat_configured = chat
+            .with_params(
+              max_completion_tokens: rendered[:max_tokens] || 1200,
+              response_format: { type: "json_object" }
+            )
+            .with_instructions(rendered[:system_message].to_s)
 
-        # Only add temperature for non-GPT-5 models (GPT-5 doesn't support it)
-        unless rendered[:model]&.start_with?('gpt-5')
-          chat_with_schema = chat_with_schema.with_temperature(rendered[:temperature] || LLM_TEMPERATURE)
+          response = chat_configured.ask(rendered[:content].to_s)
+        else
+          # GPT-4: Use strict schema
+          schema = {
+            type: "object",
+            properties: {
+              patent_number: { type: "string", description: "The patent number as inputted by the user" },
+              claim_number: { type: "number", description: "The claim number evaluated for the patent, as inputted by the user" },
+              subject_matter: {
+                type: "string",
+                enum: ["Abstract", "Natural Phenomenon", "Not Abstract/Not Natural Phenomenon"],
+                description: "The output determined for Alice Step One"
+              },
+              inventive_concept: {
+                type: "string",
+                enum: ["No", "Yes", "-"],
+                description: "The output determined for Alice Step Two"
+              },
+              validity_score: {
+                type: "number",
+                minimum: 1,
+                maximum: 5,
+                description: "The validity score from 1 to 5 determined for the patent claim"
+              }
+            },
+            required: ["patent_number", "claim_number", "subject_matter", "inventive_concept", "validity_score"],
+            additionalProperties: false
+          }
+
+          chat_configured = chat
+            .with_schema(schema)
+            .with_temperature(rendered[:temperature] || LLM_TEMPERATURE)
+            .with_params(max_completion_tokens: rendered[:max_tokens] || 1200)
+            .with_instructions(rendered[:system_message].to_s)
+
+          response = chat_configured.ask(rendered[:content].to_s)
         end
-
-        response = chat_with_schema
-                       .with_params(max_completion_tokens: rendered[:max_tokens] || 1200)
-                       .with_instructions(rendered[:system_message].to_s)
-                       .ask(rendered[:content].to_s)
 
         # Handle case where response.content might be a String instead of Hash
         raw = if response.content.is_a?(Hash)
