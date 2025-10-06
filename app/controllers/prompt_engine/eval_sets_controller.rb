@@ -138,21 +138,7 @@ module PromptEngine
           Rails.logger.error "Error loading detailed results: #{e.message}"
           # Continue gracefully without detailed comparison
         end
-      elsif @eval_runs.any?
-        # Auto-select the most recent run if no run_id provided
-        @selected_run = @eval_runs.first
-        begin
-          @eval_results = if defined?(PromptEngine::EvalResult)
-            @selected_run.eval_results.includes(:test_case).order(:id)
-          else
-            []
-          end
-
-          @ground_truth_data = load_ground_truth_data
-          @detailed_comparison = build_detailed_comparison(@eval_results, @ground_truth_data)
-        rescue => e
-          Rails.logger.error "Error loading auto-selected results: #{e.message}"
-        end
+      # Don't auto-select any run - user must explicitly choose from dropdown
       end
 
       render 'results'
