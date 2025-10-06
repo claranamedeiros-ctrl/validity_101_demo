@@ -30,11 +30,25 @@ module Ai
         # For GPT-4: use strict schema validation
         if rendered[:model]&.start_with?('gpt-5')
           # GPT-5: Just rely on prompt instructions for JSON output
+          Rails.logger.info "=" * 80
+          Rails.logger.info "GPT-5 REQUEST FOR #{patent_number}"
+          Rails.logger.info "Model: #{rendered[:model]}"
+          Rails.logger.info "Max tokens: #{rendered[:max_tokens] || 1200}"
+          Rails.logger.info "System message length: #{rendered[:system_message].to_s.length} chars"
+          Rails.logger.info "Content length: #{rendered[:content].to_s.length} chars"
+          Rails.logger.info "=" * 80
+
           chat_configured = chat
             .with_params(max_completion_tokens: rendered[:max_tokens] || 1200)
             .with_instructions(rendered[:system_message].to_s)
 
           response = chat_configured.ask(rendered[:content].to_s)
+
+          Rails.logger.info "GPT-5 RESPONSE:"
+          Rails.logger.info "Response class: #{response.class}"
+          Rails.logger.info "Response content class: #{response.content.class}"
+          Rails.logger.info "Response content: #{response.content.inspect}"
+          Rails.logger.info "=" * 80
         else
           # GPT-4: Use strict schema
           schema = {
