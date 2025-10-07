@@ -33,7 +33,15 @@
               <% end %>
             <% end %>
           </p>
-          <button onclick="location.reload()" class="refresh-btn-banner">↻ Refresh Page</button>
+          <div style="display: flex; gap: 10px;">
+            <button onclick="location.reload()" class="refresh-btn-banner">↻ Refresh Page</button>
+            <%= button_to "🛑 EMERGENCY STOP",
+                stop_prompt_eval_set_path(@prompt, @eval_set),
+                method: :post,
+                data: { confirm: 'Are you sure you want to stop all running evaluations? This will prevent further OpenAI API calls.' },
+                class: "btn-danger",
+                style: "background-color: #dc3545; color: white; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;" %>
+          </div>
         </div>
       </div>
     </div>

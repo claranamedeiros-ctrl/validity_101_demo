@@ -1,4 +1,13 @@
 Rails.application.routes.draw do
+  # Custom PromptEngine routes (must be before mount)
+  namespace :prompt_engine do
+    resources :prompts, only: [] do
+      resources :eval_sets, only: [] do
+        post 'stop', on: :member
+      end
+    end
+  end
+
   mount PromptEngine::Engine => "/prompt_engine"  # admin UI
   resources :validities, only: %i[new create]
   get 'validity/:id', to: 'validities#show', as: 'validity'

@@ -7,7 +7,7 @@ module PromptEngine
     layout "prompt_engine/admin"
 
     before_action :set_prompt
-    before_action :set_eval_set, only: [ :show, :edit, :update, :destroy, :run, :compare, :metrics ]
+    before_action :set_eval_set, only: [ :show, :edit, :update, :destroy, :run, :stop, :compare, :metrics ]
 
     def index
       @eval_sets = @prompt.eval_sets
@@ -87,6 +87,33 @@ module PromptEngine
         Rails.logger.error "Custom evaluation error: #{e.class} - #{e.message}"
         Rails.logger.error e.backtrace.join("\n")
         redirect_to prompt_eval_set_path(@prompt, @eval_set), alert: "Evaluation failed: #{e.message}"
+      end
+    end
+
+    def stop
+      # Emergency stop - mark all running eval runs as failed
+      running_runs = @eval_set.eval_runs.where(status: 'running')
+
+      if running_runs.any?
+        running_runs.update_all(
+          status: 'failed',
+          error_message: 'Manually stopped by user',
+          completed_at: Time.current
+        )
+
+        # Also mark any pending Solid Queue jobs as failed
+        if defined?(SolidQueue::Job)
+          SolidQueue::Job.where(finished_at: nil).where('created_at > ?', 1.hour.ago).update_all(
+            finished_at: Time.current,
+            failed_at: Time.current
+          )
+        end
+
+        redirect_to prompt_eval_set_path(@prompt, @eval_set, mode: 'results'),
+          notice: "Stopped #{running_runs.count} running evaluation(s). Jobs will stop processing."
+      else
+        redirect_to prompt_eval_set_path(@prompt, @eval_set, mode: 'results'),
+          alert: "No running evaluations to stop."
       end
     end
 
