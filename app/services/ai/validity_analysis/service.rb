@@ -45,8 +45,27 @@ module Ai
             .with_instructions(rendered[:system_message].to_s)
 
           # Add timeout to prevent hanging (3 minutes max)
-          response = Timeout.timeout(180) do
-            chat_configured.ask(rendered[:content].to_s)
+          begin
+            response = Timeout.timeout(180) do
+              chat_configured.ask(rendered[:content].to_s)
+            end
+          rescue => api_error
+            # Log the ACTUAL API error with full details
+            Rails.logger.error "=" * 80
+            Rails.logger.error "OPENAI API ERROR for #{patent_number}"
+            Rails.logger.error "Error Class: #{api_error.class}"
+            Rails.logger.error "Error Message: #{api_error.message}"
+            Rails.logger.error "Error Backtrace:"
+            Rails.logger.error api_error.backtrace.first(20).join("\n")
+
+            # Check if it's an OpenAI error with response body
+            if api_error.respond_to?(:response)
+              Rails.logger.error "API Response Body: #{api_error.response}"
+            end
+            Rails.logger.error "=" * 80
+
+            # Re-raise to trigger retry logic
+            raise api_error
           end
 
           Rails.logger.info "GPT-5 RESPONSE:"
@@ -89,8 +108,26 @@ module Ai
             .with_instructions(rendered[:system_message].to_s)
 
           # Add timeout to prevent hanging (3 minutes max)
-          response = Timeout.timeout(180) do
-            chat_configured.ask(rendered[:content].to_s)
+          begin
+            response = Timeout.timeout(180) do
+              chat_configured.ask(rendered[:content].to_s)
+            end
+          rescue => api_error
+            # Log the ACTUAL API error with full details
+            Rails.logger.error "=" * 80
+            Rails.logger.error "OPENAI API ERROR for #{patent_number}"
+            Rails.logger.error "Error Class: #{api_error.class}"
+            Rails.logger.error "Error Message: #{api_error.message}"
+            Rails.logger.error "Error Backtrace:"
+            Rails.logger.error api_error.backtrace.first(20).join("\n")
+
+            if api_error.respond_to?(:response)
+              Rails.logger.error "API Response Body: #{api_error.response}"
+            end
+            Rails.logger.error "=" * 80
+
+            # Re-raise to trigger retry logic
+            raise api_error
           end
         end
 
