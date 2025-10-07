@@ -13,19 +13,7 @@ prompt_content = File.read(Rails.root.join('full_prompt.md'))
 prompt = PromptEngine::Prompt.find_or_create_by(id: 1) do |p|
   p.name = 'Patent Validity Analysis - Alice Test'
   p.description = '101 Validity Agent using Alice Test methodology'
-  p.status = 'active'
-end
-
-# Create or update the prompt version
-if prompt.prompt_versions.empty?
-  prompt.prompt_versions.create!(
-    content: prompt_content,
-    system_message: "You are a judge at the U.S. Court of Appeals for the Federal Circuit.",
-    version_number: 1
-  )
-  puts "   ✅ Created prompt version"
-else
-  puts "   ⏭️  Prompt version already exists"
+  p.content = prompt_content
 end
 
 puts "   Prompt ID: #{prompt.id}, Name: #{prompt.name}"
