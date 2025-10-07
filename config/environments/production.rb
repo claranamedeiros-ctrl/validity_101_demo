@@ -67,12 +67,10 @@ Rails.application.configure do
   # Asset pipeline configuration
   config.assets.compile = false
   config.assets.digest = true
+  config.assets.css_compressor = nil  # Disable SassC to fix CSS custom properties error
 
   # Precompile additional assets
   config.assets.precompile += %w( application.js application.css )
-
-  # Background Jobs - Use Solid Queue
-  config.active_job.queue_adapter = :solid_queue
 
   # Action Mailer configuration
   config.action_mailer.delivery_method = :smtp
