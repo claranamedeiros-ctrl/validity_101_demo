@@ -71,6 +71,9 @@ Rails.application.configure do
   # Precompile additional assets
   config.assets.precompile += %w( application.js application.css )
 
+  # Background Jobs - Use Solid Queue
+  config.active_job.queue_adapter = :solid_queue
+
   # Action Mailer configuration
   config.action_mailer.delivery_method = :smtp
   config.action_mailer.perform_deliveries = true
