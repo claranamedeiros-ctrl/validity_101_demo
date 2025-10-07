@@ -22,6 +22,7 @@ gem "ruby-openai", "~> 7.4"
 gem "prompt_engine"
 gem "csv"
 gem "dotenv-rails"
+gem "solid_queue"
 
 group :development, :test do
   gem "debug", platforms: %i[ mri windows ]

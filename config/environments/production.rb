@@ -89,4 +89,7 @@ Rails.application.configure do
   config.active_record.encryption.primary_key = ENV['ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY'] || ('production' * 4)
   config.active_record.encryption.deterministic_key = ENV['ACTIVE_RECORD_ENCRYPTION_DETERMINISTIC_KEY'] || ('production' * 4)
   config.active_record.encryption.key_derivation_salt = ENV['ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT'] || ('production' * 4)
+
+  # Active Job - Use Solid Queue for background job processing
+  config.active_job.queue_adapter = :solid_queue
 end
