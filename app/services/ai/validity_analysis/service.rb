@@ -44,7 +44,10 @@ module Ai
             .with_params(max_completion_tokens: rendered[:max_tokens] || 1200)
             .with_instructions(rendered[:system_message].to_s)
 
-          response = chat_configured.ask(rendered[:content].to_s)
+          # Add timeout to prevent hanging (3 minutes max)
+          response = Timeout.timeout(180) do
+            chat_configured.ask(rendered[:content].to_s)
+          end
 
           Rails.logger.info "GPT-5 RESPONSE:"
           Rails.logger.info "Response class: #{response.class}"
@@ -85,7 +88,10 @@ module Ai
             .with_params(max_completion_tokens: rendered[:max_tokens] || 1200)
             .with_instructions(rendered[:system_message].to_s)
 
-          response = chat_configured.ask(rendered[:content].to_s)
+          # Add timeout to prevent hanging (3 minutes max)
+          response = Timeout.timeout(180) do
+            chat_configured.ask(rendered[:content].to_s)
+          end
         end
 
         # Handle different response.content types
