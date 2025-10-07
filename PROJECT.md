@@ -247,12 +247,81 @@ gt_overall_eligibility: "Eligible"
 **Now they match! ✅**
 
 **Why "Not Abstract/Not Natural Phenomenon" is so verbose:**
-This comes from the LLM schema enum constraint:
-```ruby
-enum: ["Abstract", "Natural Phenomenon", "Not Abstract/Not Natural Phenomenon"]
+
+There's actually a **CONFLICT** between what the system prompt says and what the schema enforces:
+
+**What the System Prompt Says (the actual text GPT reads):**
+```
+If the patent claims ARE NOT directed to one of the patent-ineligible concepts,
+the patent is eligible. The output for Alice Step One is "Not Abstract" or
+"Not Natural Phenomenon"...
 ```
 
-The LLM must return one of these THREE exact strings. We can't use "Not Abstract" alone because that's ambiguous - it could mean "Natural Phenomenon" (which is also not abstract in a different way).
+The prompt tells the LLM it can return EITHER:
+- "Not Abstract" (when it's not an abstract idea)
+- "Not Natural Phenomenon" (when it's not a natural phenomenon)
+
+**What the Schema Enforces (GPT-4 only):**
+```ruby
+subject_matter: {
+  type: "string",
+  enum: ["Abstract", "Natural Phenomenon", "Not Abstract/Not Natural Phenomenon"]
+}
+```
+
+The schema only allows ONE combined string for the "eligible" case.
+
+**The Mismatch:**
+- **Prompt says:** Return "Not Abstract" OR "Not Natural Phenomenon"
+- **Schema says:** Return "Not Abstract/Not Natural Phenomenon" (combined)
+- **Who wins?** Schema wins (OpenAI enforces it regardless of prompt text)
+
+**Why We Had To Use The Combined String:**
+
+In patent law, there are THREE possible outcomes for Alice Step One:
+
+1. **"Abstract"** → Claim is directed to an abstract idea (FAIL Step One)
+2. **"Natural Phenomenon"** → Claim is directed to laws of nature/natural phenomena (FAIL Step One)
+3. **"Not Abstract/Not Natural Phenomenon"** → Claim is NOT directed to either (PASS Step One)
+
+**The Problem With "Not Abstract" Alone:**
+
+If we only had "Not Abstract" as an option, it's ambiguous:
+- Does "Not Abstract" mean "it's a natural phenomenon instead"? (still ineligible)
+- Or does it mean "not abstract AND not a natural phenomenon"? (eligible)
+
+**Real Examples:**
+
+| Patent | Alice Step One Result | Meaning |
+|--------|----------------------|---------|
+| Einstein's E=mc² formula | "Natural Phenomenon" | Ineligible (law of nature) |
+| Generic database sorting | "Abstract" | Ineligible (abstract idea) |
+| Improved CPU cache algorithm | "Not Abstract/Not Natural Phenomenon" | Passes Step One (may be eligible) |
+
+**What Actually Happens:**
+
+**For GPT-4 (with schema enforcement):**
+- LLM wants to say "Not Abstract" (following prompt)
+- OpenAI API rejects it: "Must be one of the enum values"
+- LLM is forced to say "Not Abstract/Not Natural Phenomenon"
+- This works correctly even though prompt says something different
+
+**For GPT-5 (prompt-only, no schema):**
+- No schema enforcement
+- LLM follows the RESPONSE FORMAT section we added to prompt:
+  ```
+  subject_matter: [must be one of: "Abstract", "Natural Phenomenon",
+                    "Not Abstract/Not Natural Phenomenon"]
+  ```
+- We explicitly tell GPT-5 in the prompt to use the same three options
+
+**The Bottom Line:**
+
+The verbose "Not Abstract/Not Natural Phenomenon" exists because:
+1. We need to distinguish "passes Alice Step One" from both types of failures
+2. The schema enforces this specific string (for GPT-4)
+3. We copied the same format to the prompt (for GPT-5 consistency)
+4. The original prompt text saying "Not Abstract" or "Not Natural Phenomenon" is misleading but harmless (schema overrides it)
 
 ---
 
