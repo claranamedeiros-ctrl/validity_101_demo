@@ -33,7 +33,13 @@
               <% end %>
             <% end %>
           </p>
-          <button onclick="location.reload()" class="refresh-btn-banner">↻ Refresh Page</button>
+          <div class="running-actions">
+            <button onclick="location.reload()" class="refresh-btn-banner">↻ Refresh Page</button>
+            <%= button_to "⏹ Emergency Stop", stop_prompt_eval_set_path(@prompt, @eval_set),
+                method: :post,
+                class: "stop-btn-banner",
+                data: { confirm: "Are you sure? This will stop all running evaluations and mark them as failed." } %>
+          </div>
         </div>
       </div>
     </div>
@@ -277,6 +283,13 @@
   font-size: 0.95rem;
 }
 
+.running-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  align-items: center;
+}
+
 .refresh-btn-banner {
   background: #f59e0b;
   color: white;
@@ -285,12 +298,26 @@
   border-radius: 6px;
   cursor: pointer;
   font-weight: 500;
-  margin-top: 0.75rem;
   transition: background 0.2s;
 }
 
 .refresh-btn-banner:hover {
   background: #d97706;
+}
+
+.stop-btn-banner {
+  background: #dc2626;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+
+.stop-btn-banner:hover {
+  background: #b91c1c;
 }
 
 .runs-grid {
