@@ -33,13 +33,7 @@
               <% end %>
             <% end %>
           </p>
-          <div class="running-actions">
-            <button onclick="location.reload()" class="refresh-btn-banner">↻ Refresh Page</button>
-            <%= button_to "⏹ Emergency Stop", stop_prompt_eval_set_path(@prompt, @eval_set),
-                method: :post,
-                class: "stop-btn-banner",
-                data: { confirm: "Are you sure? This will stop all running evaluations and mark them as failed." } %>
-          </div>
+          <button onclick="location.reload()" class="refresh-btn-banner">↻ Refresh Page</button>
         </div>
       </div>
     </div>
