@@ -68,9 +68,10 @@ module PromptEngine
       # Get selected patent IDs from params, if any
       selected_patent_ids = params[:patent_ids].present? ? params[:patent_ids] : nil
 
-      # Create new eval run (PromptEngine doesn't use versions, just reference the prompt)
+      # Create new eval run with current prompt version
+      prompt_version = @prompt.prompt_versions.last || @prompt.prompt_versions.first
       @eval_run = @eval_set.eval_runs.create!(
-        prompt: @prompt
+        prompt_version_id: prompt_version.id
       )
 
       # Store selected patent IDs in eval_run metadata if provided
