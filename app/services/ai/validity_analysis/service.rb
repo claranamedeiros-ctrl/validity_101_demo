@@ -213,14 +213,19 @@ module Ai
         Rails.logger.error("=" * 80)
 
         # Also log to a dedicated error file for easy debugging
-        File.open(Rails.root.join('log', 'patent_evaluation_errors.log'), 'a') do |f|
-          f.puts "\n#{'-' * 80}"
-          f.puts "Timestamp: #{error_details[:timestamp]}"
-          f.puts "Patent: #{patent_number}"
-          f.puts "Attempts: #{retry_count + 1}"
-          f.puts "Error: #{e.class} - #{e.message}"
-          f.puts "Backtrace:\n#{error_details[:backtrace].join("\n")}"
-          f.puts '-' * 80
+        begin
+          FileUtils.mkdir_p(Rails.root.join('log'))
+          File.open(Rails.root.join('log', 'patent_evaluation_errors.log'), 'a') do |f|
+            f.puts "\n#{'-' * 80}"
+            f.puts "Timestamp: #{error_details[:timestamp]}"
+            f.puts "Patent: #{patent_number}"
+            f.puts "Attempts: #{retry_count + 1}"
+            f.puts "Error: #{e.class} - #{e.message}"
+            f.puts "Backtrace:\n#{error_details[:backtrace].join("\n")}"
+            f.puts '-' * 80
+          end
+        rescue => log_error
+          Rails.logger.warn "Could not write to error log file: #{log_error.message}"
         end
 
         { status: :error, status_message: ERROR_MESSAGE, error: "#{e.class}: #{e.message}" }
