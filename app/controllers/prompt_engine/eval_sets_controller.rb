@@ -110,10 +110,10 @@ module PromptEngine
           )
         end
 
-        redirect_to prompt_eval_set_path(@prompt, @eval_set, mode: 'results'),
+        redirect_to "/prompt_engine/prompts/#{@prompt.id}/eval_sets/#{@eval_set.id}?mode=results",
           notice: "Stopped #{running_runs.count} running evaluation(s). Jobs will stop processing."
       else
-        redirect_to prompt_eval_set_path(@prompt, @eval_set, mode: 'results'),
+        redirect_to "/prompt_engine/prompts/#{@prompt.id}/eval_sets/#{@eval_set.id}?mode=results",
           alert: "No running evaluations to stop."
       end
     end
