@@ -69,7 +69,7 @@ module PromptEngine
       selected_patent_ids = params[:patent_ids].present? ? params[:patent_ids] : nil
 
       # Create new eval run with current prompt version
-      prompt_version = @prompt.prompt_versions.last || @prompt.prompt_versions.first
+      prompt_version = @prompt.current_version || @prompt.versions.last
       @eval_run = @eval_set.eval_runs.create!(
         prompt_version_id: prompt_version.id
       )
