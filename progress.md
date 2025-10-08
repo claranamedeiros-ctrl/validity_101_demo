@@ -2444,6 +2444,442 @@ Result: SUCCESS ✓
 
 ---
 
+## 🎓 COMPREHENSIVE ARCHITECTURE GUIDE (October 8, 2025)
+
+This section documents the complete system architecture, focusing on critical learnings about Rails engines, PromptEngine gem, RubyLLM, Solid Queue, and Railway deployment.
+
+### **System Architecture Overview**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Railway Platform                          │
+├──────────────────────────┬──────────────────────────────────┤
+│   Web Service            │   Worker Service                  │
+│   (validity_101_demo)    │   (validity_101_demo-worker)     │
+│                          │                                   │
+│   - Puma web server      │   - Solid Queue worker (bin/jobs)│
+│   - Rails 8.0            │   - Same codebase                 │
+│   - PromptEngine UI      │   - Background job processor      │
+│   - EvaluationJob queue  │   - Polls Solid Queue DB          │
+└──────────────────────────┴──────────────────────────────────┘
+                    │
+                    ▼
+         ┌──────────────────────┐
+         │  PostgreSQL Database  │
+         │  (Railway managed)    │
+         │                       │
+         │  Tables:              │
+         │  - prompts            │
+         │  - prompt_versions    │
+         │  - eval_sets          │
+         │  - eval_runs          │
+         │  - test_cases         │
+         │  - eval_results       │
+         │  - solid_queue_*      │
+         └──────────────────────┘
+                    │
+                    ▼
+         ┌──────────────────────┐
+         │   OpenAI API          │
+         │   - GPT-5 model       │
+         │   - max_tokens: 4000  │
+         └──────────────────────┘
+```
+
+### **Critical Components Explained**
+
+#### **1. PromptEngine Gem - Rails Engine Pattern**
+
+**What is a Rails Engine?**
+- A Rails engine is a mini-application that can be mounted inside a host Rails app
+- Has its own routes, controllers, views, models
+- PromptEngine is a third-party gem providing prompt management UI
+
+**Key Insight - Route Helpers:**
+```ruby
+# ❌ WRONG - This doesn't work in engine views/controllers
+redirect_to prompt_eval_set_path(@prompt, @eval_set, mode: 'results')
+
+# ✅ CORRECT - Use hardcoded paths
+redirect_to "/prompt_engine/prompts/#{@prompt.id}/eval_sets/#{@eval_set.id}?mode=results"
+
+# Why? Because route helpers defined in main app (config/routes.rb)
+# are NOT automatically available in mounted engine contexts
+```
+
+**PromptEngine Database Fields:**
+```ruby
+Prompt model:
+  - name: String (identifier, e.g., "validity-101-agent")
+  - system_message: Text (AI instructions - THE FULL PROMPT)
+  - content: Text (user message template with variables)
+  - model: String (e.g., "gpt-5", "gpt-4o")
+  - max_tokens: Integer (completion token limit)
+  - temperature: Float (not used for GPT-5)
+```
+
+**Critical Understanding - system_message vs content:**
+```ruby
+# system_message = AI instructions (sent to OpenAI as "system" role)
+prompt.system_message = """
+You are a judge at the Federal Circuit...
+[6074 chars of Alice Test instructions]
+RESPONSE FORMAT
+You must return JSON with: subject_matter, inventive_concept, validity_score
+"""
+
+# content = User message template with variable placeholders
+prompt.content = """
+PATENT CONTENT
+{{patent_id}}
+{{claim_number}}
+{{claim_text}}
+{{abstract}}
+"""
+
+# When rendered:
+rendered = PromptEngine.render('validity-101-agent', variables: {
+  patent_id: "US6128415A",
+  claim_number: 1,
+  claim_text: "A device profile for...",
+  abstract: "Device profiles..."
+})
+
+# Result:
+rendered[:system_message] # => 6074 chars (unchanged)
+rendered[:content]         # => Actual patent data (variables substituted)
+```
+
+#### **2. RubyLLM - LLM Abstraction Layer**
+
+**Purpose:** Provides unified interface to OpenAI API with structured outputs
+
+**Critical Difference - GPT-4 vs GPT-5:**
+
+| Feature | GPT-4 | GPT-5 |
+|---------|-------|-------|
+| Temperature | ✅ Supported | ❌ Not supported |
+| `.with_schema()` | ✅ Works (strict JSON) | ❌ Returns empty response |
+| `max_completion_tokens` | 1200 sufficient | ⚠️ Needs 4000+ (reasoning overhead) |
+| Response format | Enforced by API | Must specify in prompt |
+| Response type | String or Hash | RubyLLM::Content object |
+
+**Correct GPT-5 Usage:**
+```ruby
+# ❌ WRONG - GPT-5 doesn't support schema enforcement
+chat = RubyLLM.chat(provider: 'openai', model: 'gpt-5')
+  .with_schema(json_schema)  # This causes empty responses!
+  .with_temperature(0.1)     # This causes empty responses!
+
+# ✅ CORRECT - GPT-5 usage
+chat = RubyLLM.chat(provider: 'openai', model: 'gpt-5')
+  .with_params(max_completion_tokens: 4000)  # CRITICAL: 4000+ tokens
+  .with_instructions(system_message)          # Full prompt with RESPONSE FORMAT
+  .ask(user_content)
+
+# Handle response (GPT-5 returns different type)
+if response.content.respond_to?(:text)
+  json_string = response.content.text  # GPT-5 path
+elsif response.content.is_a?(String)
+  json_string = response.content       # GPT-4 path
+end
+```
+
+#### **3. Solid Queue - Background Job System**
+
+**Why Solid Queue?**
+- Database-backed (no Redis needed)
+- Built-in to Rails 8
+- Reliable job persistence
+- Perfect for Railway deployment
+
+**Two-Service Architecture:**
+```ruby
+# Web Service (Procfile)
+web: bundle exec rails server -b 0.0.0.0 -p $PORT
+
+# Worker Service (separate Railway service)
+# Custom Start Command: bin/jobs
+# This runs: bundle exec rails solid_queue:start
+```
+
+**Why Separate Services?**
+1. **Isolation**: Web crashes don't stop jobs, job processing doesn't block web
+2. **Scaling**: Can scale workers independently of web servers
+3. **Healthchecks**: Worker doesn't respond to HTTP, needs separate healthcheck config
+4. **Resources**: Background jobs need more CPU/memory than web requests
+
+**Job Flow:**
+```ruby
+# 1. User clicks "Run Alice Test" in web UI
+EvalSetsController#run
+  → Creates EvalRun record
+  → Enqueues job: EvaluationJob.perform_later(eval_run_id, patent_ids)
+  → Job stored in solid_queue_jobs table
+  → Redirects to results page
+
+# 2. Worker service polls database
+Worker polls solid_queue_jobs table
+  → Finds pending EvaluationJob
+  → Claims job (locks it)
+  → Executes EvaluationJob#perform
+  → Job processes 50 patents (25 minutes)
+  → Updates eval_run.status = 'completed'
+  → Marks job as finished
+
+# 3. UI shows progress
+Results page auto-refreshes every 5 seconds
+  → Reads eval_run.metadata['progress']
+  → Shows "14% complete - Processing 7 of 50"
+```
+
+#### **4. Ground Truth Data Structure**
+
+**CSV Format (gt_transformed_for_llm.csv):**
+```csv
+patent_number,claim_number,claim_text,abstract,gt_subject_matter,gt_inventive_concept,gt_overall_eligibility
+US6128415A,1,"A device profile for...","Device profiles...","Abstract","No","Ineligible"
+```
+
+**Database Storage (test_cases table):**
+```ruby
+TestCase.create!(
+  eval_set: eval_set,
+  description: "Patent US6128415A Claim 1",
+  input_variables: {
+    patent_id: "US6128415A",
+    claim_number: 1,
+    claim_text: "A device profile for...",
+    abstract: "Device profiles..."
+  }.to_json,
+  expected_output: {
+    subject_matter: "Abstract",
+    inventive_concept: "No",
+    overall_eligibility: "Ineligible"
+  }.to_json
+)
+```
+
+**Evaluation Grading Logic:**
+```ruby
+# All 3 fields must match EXACTLY (case-insensitive)
+actual = {
+  subject_matter: "Abstract",
+  inventive_concept: "No",
+  overall_eligibility: "Ineligible"
+}
+expected = JSON.parse(test_case.expected_output, symbolize_names: true)
+
+passed = (
+  actual[:subject_matter].downcase == expected[:subject_matter].downcase &&
+  actual[:inventive_concept].downcase == expected[:inventive_concept].downcase &&
+  actual[:overall_eligibility].downcase == expected[:overall_eligibility].downcase
+)
+```
+
+#### **5. Railway Deployment Architecture**
+
+**Service Configuration:**
+
+```yaml
+Web Service (validity_101_demo):
+  Build Command: (auto-detected)
+  Start Command: bundle exec rails server -b 0.0.0.0 -p $PORT
+  Healthcheck: /up (HTTP 200)
+  Auto-deploy: Enabled (on git push)
+  Environment Variables:
+    - DATABASE_URL (shared with worker)
+    - OPENAI_API_KEY
+    - RAILS_ENV=production
+
+Worker Service (validity_101_demo-worker):
+  Build Command: (same as web - shares codebase)
+  Start Command: bin/jobs
+  Healthcheck: DISABLED (not HTTP service)
+  Auto-deploy: Enabled (on git push)
+  Environment Variables: (same as web - shares DB)
+```
+
+**Critical Railway Gotchas:**
+
+1. **railway.toml applies to ALL services**
+   - If you set healthcheckPath, it applies to worker too
+   - Worker can't respond to HTTP, healthcheck fails
+   - **Solution**: Delete railway.toml, configure per-service in UI
+
+2. **Database connection sharing**
+   - Both services use same DATABASE_URL
+   - Solid Queue jobs stored in shared DB
+   - Web writes jobs, worker reads/executes
+
+3. **Code deployment**
+   - Both services deploy when you `git push`
+   - Build happens once, used for both services
+   - Different start commands, same codebase
+
+#### **6. Emergency Stop Implementation**
+
+**Route Definition:**
+```ruby
+# config/routes.rb
+namespace :prompt_engine do
+  resources :prompts, only: [] do
+    resources :eval_sets, only: [] do
+      post 'stop', on: :member  # POST /prompt_engine/prompts/:id/eval_sets/:id/stop
+    end
+  end
+end
+```
+
+**Controller Action:**
+```ruby
+def stop
+  running_runs = @eval_set.eval_runs.where(status: 'running')
+  running_runs.update_all(
+    status: 'failed',
+    error_message: 'Manually stopped by user',
+    completed_at: Time.current
+  )
+
+  # Clean up Solid Queue jobs
+  SolidQueue::Job.where(finished_at: nil).update_all(
+    finished_at: Time.current,
+    failed_at: Time.current
+  )
+
+  redirect_to "/prompt_engine/prompts/#{@prompt.id}/eval_sets/#{@eval_set.id}?mode=results"
+end
+```
+
+**UI Button:**
+```erb
+<%= button_to "⏹ Emergency Stop",
+    "/prompt_engine/prompts/#{@prompt.id}/eval_sets/#{@eval_set.id}/stop",
+    method: :post,
+    data: { confirm: "Are you sure?" } %>
+```
+
+### **Complete Debugging Checklist**
+
+When GPT-5 returns empty responses, check in this order:
+
+1. **✅ Model name correct?**
+   ```ruby
+   prompt.model # Should be "gpt-5" (not "gpt-4o", "o1-mini", etc.)
+   ```
+
+2. **✅ Max tokens sufficient?**
+   ```ruby
+   prompt.max_tokens # Should be 4000+ for GPT-5 (not 1200)
+   ```
+
+3. **✅ System message has full prompt?**
+   ```ruby
+   prompt.system_message.length # Should be ~6000+ chars
+   prompt.system_message.include?("RESPONSE FORMAT") # Should be true
+   ```
+
+4. **✅ Content has variable template?**
+   ```ruby
+   prompt.content # Should be "{{patent_id}}\n{{claim_number}}\n..."
+   ```
+
+5. **✅ Variables are substituting?**
+   ```ruby
+   rendered = PromptEngine.render('validity-101-agent', variables: {...})
+   rendered[:content].length # Should be 1000-5000 chars (actual patent data)
+   ```
+
+6. **✅ No temperature parameter for GPT-5?**
+   ```ruby
+   # Service code should skip .with_temperature() for GPT-5
+   unless rendered[:model]&.start_with?('gpt-5')
+     chat_configured = chat.with_temperature(...)
+   end
+   ```
+
+7. **✅ No .with_schema() for GPT-5?**
+   ```ruby
+   # Service code should skip .with_schema() for GPT-5
+   if rendered[:model]&.start_with?('gpt-5')
+     # Just use .with_instructions() and .ask()
+   else
+     # GPT-4 path: use .with_schema()
+   end
+   ```
+
+8. **✅ Response handling for RubyLLM::Content?**
+   ```ruby
+   if response.content.respond_to?(:text)
+     json_string = response.content.text  # GPT-5
+   elsif response.content.is_a?(String)
+     json_string = response.content       # GPT-4
+   end
+   ```
+
+### **Performance Metrics**
+
+**Run #21 Final Results (50 patents, GPT-5):**
+- Total time: ~25 minutes
+- Per patent: ~30 seconds average
+- Success rate: 100% (all patents processed)
+- Model: gpt-5
+- Max tokens: 4000
+- Retry logic: 3 attempts with exponential backoff
+- No API errors
+
+**Cost Estimate (GPT-5):**
+- Input: ~10,000 tokens per patent (prompt + patent data)
+- Output: ~200 tokens per patent (JSON response)
+- 50 patents = ~500K input + 10K output tokens
+- GPT-5 pricing: $15/1M input, $60/1M output
+- Estimated cost: $7.50 + $0.60 = **~$8.10 per full run**
+
+### **Files Modified - Complete Reference**
+
+1. **Database (Railway PostgreSQL):**
+   ```ruby
+   # Prompt ID 2 ("validity-101-agent")
+   - system_message: 6074 chars (full Alice Test prompt from full_prompt.md)
+   - content: 73 chars (variable template)
+   - model: "gpt-5"
+   - max_tokens: 4000
+   ```
+
+2. **app/views/prompt_engine/eval_sets/results.html.erb:**
+   - Emergency stop button with hardcoded path
+   - Progress tracking UI with auto-refresh
+   - Ground truth comparison table
+
+3. **app/controllers/prompt_engine/eval_sets_controller.rb:**
+   - Stop action with hardcoded redirect paths
+   - Fixed route helper issues
+
+4. **config/routes.rb:**
+   - Custom stop route (POST)
+
+5. **Railway Service Configuration:**
+   - Web: PORT 8080, healthcheck /up
+   - Worker: bin/jobs, no healthcheck
+
+### **Key Learnings - DO NOT REPEAT**
+
+❌ **Never use route helpers across engine boundaries**
+❌ **Never assume 1200 tokens is enough for GPT-5**
+❌ **Never use temperature or schema with GPT-5**
+❌ **Never test with only simple prompts**
+❌ **Never apply railway.toml to all services**
+❌ **Never assume same response types across models**
+
+✅ **Always use hardcoded paths in engine overrides**
+✅ **Always set max_tokens: 4000+ for GPT-5**
+✅ **Always check response.content type before parsing**
+✅ **Always test with full production-size data**
+✅ **Always configure Railway services individually**
+✅ **Always verify variable substitution in templates**
+
+---
+
 **Last Updated**: October 8, 2025
-**Status**: ✅ GPT-5 fully operational - 100% success rate on production run
-**Next Steps**: Monitor Run #18 completion, verify all 50 patents process successfully
+**Status**: ✅ Production ready - Run #21 completed successfully (50/50 patents)
+**Next Steps**: System stable, ready for production use
