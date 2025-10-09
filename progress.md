@@ -2633,13 +2633,54 @@ Results page auto-refreshes every 5 seconds
   → Shows "14% complete - Processing 7 of 50"
 ```
 
-#### **4. Ground Truth Data Structure**
+#### **4. Ground Truth Data Structure & Critical Transformation**
 
-**CSV Format (gt_transformed_for_llm.csv):**
+**Original Ground Truth (Ground_truth.csv.backup):**
+```csv
+Patent Number,Claim #,Claim Text,Abstract,Alice Step One,Alice Step Two,Overall Eligibility
+US6128415A,1,"A device profile for...","Device profiles...","Abstract","No IC Found","Ineligible"
+```
+
+**Transformed for LLM (gt_transformed_for_llm.csv):**
 ```csv
 patent_number,claim_number,claim_text,abstract,gt_subject_matter,gt_inventive_concept,gt_overall_eligibility
 US6128415A,1,"A device profile for...","Device profiles...","Abstract","No","Ineligible"
 ```
+
+**Why Transformation Was Critical:**
+
+1. **Column Name Mapping:**
+   - `Alice Step One` → `gt_subject_matter` (matches LLM output field)
+   - `Alice Step Two` → `gt_inventive_concept` (matches LLM output field)
+   - `Overall Eligibility` → `gt_overall_eligibility` (matches LLM output field)
+
+2. **Value Normalization:**
+   - Original: `"No IC Found"` (IC = Inventive Concept, human-readable)
+   - Transformed: `"No"` (matches LLM's exact output format)
+   - Why: Grading logic requires EXACT string match (case-insensitive)
+
+3. **Field Names Match Prompt's RESPONSE FORMAT:**
+   ```
+   Prompt specifies:
+   - subject_matter: [Alice Step One result]
+   - inventive_concept: [Alice Step Two result]
+   - validity_score: [1-5]
+
+   Ground truth must use same field names (with gt_ prefix for clarity)
+   ```
+
+4. **The Matching Flow:**
+   ```
+   LLM Output:           Ground Truth:           Match?
+   subject_matter: "Abstract"  →  gt_subject_matter: "Abstract"  →  ✅
+   inventive_concept: "No"     →  gt_inventive_concept: "No"     →  ✅
+   overall_eligibility: "Ineligible" → gt_overall_eligibility: "Ineligible" → ✅
+   ```
+
+**Critical Insight:**
+- If ground truth had `"No IC Found"` but LLM outputs `"No"`, test would FAIL
+- Must transform ground truth to match LLM's output format EXACTLY
+- This is why we have TWO CSV files: original (human-readable) and transformed (LLM-compatible)
 
 **Database Storage (test_cases table):**
 ```ruby
